@@ -255,7 +255,7 @@ body {
   color: #c41e3a;
   line-height: 1;
   flex-shrink: 0;
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-family: "Yuji Syuku", "Klee One", "Hiragino Mincho ProN", "Yu Mincho", serif;
 }
 
 .char-meta {
@@ -674,7 +674,7 @@ body {
   font-size: 2rem;
   font-weight: 700;
   color: #c41e3a;
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-family: "Yuji Syuku", "Klee One", "Hiragino Mincho ProN", "Yu Mincho", serif;
   line-height: 1;
 }
 
@@ -769,7 +769,7 @@ body {
   text-align: center;
   font-size: 1.3rem;
   font-weight: 600;
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-family: "Yuji Syuku", "Klee One", "Hiragino Mincho ProN", "Yu Mincho", serif;
   transition: all 0.2s;
   min-height: 48px;
 }

@@ -429,7 +429,7 @@
 
     const source = results[0] && results[0].referenceSource === "teacher"
       ? "先生のお手本と比べて採点しました。"
-      : "明朝体の骨格をもとに採点しました（先生のお手本を登録すると、より書道らしく採点します）。";
+      : "毛筆楷書のお手本と比べて採点しました（先生のお手本を登録すると、そちらと比べます）。";
     dom.scoreSource.textContent = source;
 
     renderAxes(results);

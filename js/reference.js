@@ -3,8 +3,8 @@
  * 実装: フロントエンドエンジニア 匠(Takumi)
  *
  * 手本は2系統を扱う。
- *   1. フォント手本  … ブラウザの明朝系フォントで字を描き、その骨格を基準にする。
- *                      全文字に自動で用意できるが、毛筆の筆致は再現されない。
+ *   1. フォント手本  … 毛筆楷書フォント（BrushFont）で字を描き、その字形を基準にする。
+ *                      全文字に自動で用意でき、とめ・はね・はらいの形も出る。
  *   2. 先生手本      … 先生が実際に毛筆で書いた作品を撮影して登録したもの。
  *                      登録されていればフォント手本より優先する。
  *
@@ -16,16 +16,8 @@ window.Reference = (function () {
   const KEY_PREFIX = "shodo_reference_";
   const SIZE = ImageProc.NORM_SIZE;
 
-  // 明朝系（楷書の骨格に近い）を優先して指定する
-  const FONT_STACK = [
-    '"Hiragino Mincho ProN"',
-    '"Hiragino Mincho Pro"',
-    '"Yu Mincho"',
-    '"YuMincho"',
-    '"MS Mincho"',
-    '"Noto Serif JP"',
-    "serif"
-  ].join(", ");
+  // 手本の字形は毛筆フォントに任せる（書き順アニメーションと同じもの）
+  const FONT_STACK = BrushFont.fontStack();
 
   /* ============================================================
    * フォント手本の生成
@@ -311,12 +303,14 @@ window.Reference = (function () {
       };
     }
 
-    if (!fontCache.has(char)) {
-      const font = renderFontReference(char);
+    let font = fontCache.get(char);
+    if (!font) {
+      font = renderFontReference(char);
       font.ceiling = iouCeiling(charData, font.norm);
-      fontCache.set(char, font);
+
+      // 毛筆フォントが届く前に描いた字は退避先のフォントなので覚えない
+      if (BrushFont.isLoaded()) fontCache.set(char, font);
     }
-    const font = fontCache.get(char);
 
     return {
       norm: font.norm,

@@ -86,15 +86,20 @@ window.Scorer = (function () {
   /**
    * 筆画の終わり方を手本と比べる。
    *
-   * 手本の端点それぞれについて、生徒の作品で最も近い端点を探し、
-   * 終わり方の種別（とめ/はね/はらい）が一致しているかを見る。
+   * 「とめ・はね・はらい」を絶対的なしきい値で判定することはしない。
+   * 楷書の右払いは筆先が画の胴より太く広がり、左払いは終わりで向きが変わる。
+   * つまり同じ種別でも形の特徴はまるで違うので、ひとつの数値の大小では分けられない。
+   *
+   * そこで、手本の同じ位置の筆画の終わり方と「どれだけ似ているか」で見る。
+   * 手本に合わせて書けていれば似た形になり、抜けていたり止まっていたりすれば離れる。
+   * 子どもに見せる呼び名（とめ/はね/はらい）は教材データの ending をそのまま使う。
    */
   function scoreEndings(studentNorm, size, reference, charData) {
     const stuEndings = ImageProc.analyzeStrokeEndings(studentNorm, size, size);
 
     // 評価の基準。教材データに画の終わり（とめ・はね・はらい）が定義されていれば
     // それを使う。無ければ手本の写真から取れた端点で代用する。
-    const targets = expectedEndings(charData, size);
+    const targets = expectedEndings(charData, size, reference);
     const refEndings = sortReadingOrder(reference.endings || [], size);
     const basis = targets.length ? targets : refEndings;
 
@@ -103,32 +108,31 @@ window.Scorer = (function () {
       return { score: 100, acc: 1, items: [], skipped: true };
     }
 
-    const maxDist = size * 0.26; // これより離れていれば「対応する画が無い」と判断
-    const used = new Set();
+    // 教材データの筆跡は手描きなので、手本の墨の位置とは少しずれる。
+    // 手本側を探すときはそのぶん広く取り、生徒の作品を探すときは
+    // 手本の端点の位置から狭く取る（こちらは本当にずれていれば減点したい）。
+    const refDist = size * 0.34;
+    const stuDist = size * 0.22;
+
+    // 手本側の対応する端点。これが「この画はこう終わる」という基準になる。
+    const models = assignNearest(basis, refEndings, refDist);
+
+    // 生徒側は、手本の端点の位置から探す（手本が見つからない画は道筋の終点から）
+    const anchors = basis.map((t, i) => (models[i] ? models[i].ending : t));
+    const stus = assignNearest(anchors, stuEndings, stuDist);
+
     const items = [];
 
-    basis.forEach(ref => {
-      const expectKind = ref.kind;
-      const name = ref.name || positionName(ref.x, ref.y, size);
+    basis.forEach((target, i) => {
+      const expectKind = target.kind;
+      const name = target.name || positionName(target.x, target.y, size);
+      const model = models[i];
+      const stu = stus[i];
 
-      // 最も近い生徒の端点を探す
-      let best = -1;
-      let bestD = Infinity;
-
-      stuEndings.forEach((s, j) => {
-        if (used.has(j)) return;
-        const d = Math.hypot(s.x - ref.x, s.y - ref.y);
-        if (d < bestD) {
-          bestD = d;
-          best = j;
-        }
-      });
-
-      if (best < 0 || bestD > maxDist) {
+      if (!stu) {
         items.push({
           name,
           expect: expectKind,
-          actual: null,
           ok: false,
           credit: 0,
           advice: `${name}が見つかりませんでした。${KIND_LABEL[expectKind] || ""}をはっきり書いてみましょう。`
@@ -136,23 +140,23 @@ window.Scorer = (function () {
         return;
       }
 
-      used.add(best);
-      const stu = stuEndings[best];
-      const ok = stu.kind === expectKind;
+      const sim = model
+        ? endingSimilarity(stu.ending, model.ending)
+        : (stu.ending.kind === expectKind ? 1 : 0.35);
 
-      // 種別が違っても、筆画自体は書けているので部分点を与える
-      const credit = ok ? 1 : 0.35;
+      const ok = sim >= 0.62;
 
       items.push({
         name,
         expect: expectKind,
-        actual: stu.kind,
         ok,
-        credit,
-        tipRatio: stu.tipRatio,
+        credit: sim,
+        similarity: sim,
         advice: ok
           ? `${name}の${KIND_LABEL[expectKind]}がよく書けています。`
-          : `${name}は「${KIND_LABEL[expectKind]}」ですが、「${KIND_LABEL[stu.kind]}」になっています。${KIND_ADVICE[expectKind] || ""}`
+          : `${name}の「${KIND_LABEL[expectKind]}」が手本と違います。` +
+            (model ? endingDiffNote(stu.ending, model.ending, expectKind)
+                   : (KIND_ADVICE[expectKind] || ""))
       });
     });
 
@@ -177,16 +181,103 @@ window.Scorer = (function () {
   }
 
   /**
+   * 探す位置の列に、端点を1対1で割り当てる。
+   *
+   * 近い組から順に確定させる。1つの端点を複数の画で使い回すと、
+   * 位置のずれた画が隣の画の端点を取ってしまい、取られた側が
+   * 見当違いの端点と比べられてしまう。
+   *
+   * @private
+   * @param {Array<{x:number,y:number}>} spots 探す位置（画ごと）
+   * @param {Array} list 端点の一覧
+   * @param {number} maxDist これより離れていれば対応なしとする
+   * @returns {Array<{ending:Object,index:number,dist:number}|null>} spots と同じ長さ
+   */
+  function assignNearest(spots, list, maxDist) {
+    const pairs = [];
+
+    spots.forEach((at, i) => {
+      list.forEach((e, j) => {
+        const d = Math.hypot(e.x - at.x, e.y - at.y);
+        if (d <= maxDist) pairs.push({ i, j, d });
+      });
+    });
+
+    pairs.sort((a, b) => a.d - b.d);
+
+    const result = spots.map(() => null);
+    const taken = new Set();
+
+    pairs.forEach(p => {
+      if (result[p.i] || taken.has(p.j)) return;
+      result[p.i] = { ending: list[p.j], index: p.j, dist: p.d };
+      taken.add(p.j);
+    });
+
+    return result;
+  }
+
+  // 形の特徴ごとの「これくらい違えば別の終わり方」という幅
+  const TIP_TOL = 0.50;   // 筆先の太さ（画の胴に対する比）
+  const TURN_TOL = 0.20;  // 終わりで向きが変わる量
+  const SHARP_TOL = 0.40; // 筆先のとがり
+
+  /**
+   * 生徒の筆の終わり方が、手本の同じ位置の終わり方とどれだけ似ているか（0〜1）
+   * @private
+   */
+  function endingSimilarity(stu, model) {
+    const tip   = Math.abs((stu.tipRatio || 0)   - (model.tipRatio || 0))   / TIP_TOL;
+    const turn  = Math.abs((stu.turn || 0)       - (model.turn || 0))       / TURN_TOL;
+    const sharp = Math.abs((stu.sharpRatio || 0) - (model.sharpRatio || 0)) / SHARP_TOL;
+
+    // 筆先の太さがいちばん効く（止めたか抜いたかがここに出る）
+    const diff = tip * 0.5 + turn * 0.25 + sharp * 0.25;
+
+    return Math.max(0, 1 - diff);
+  }
+
+  /**
+   * 手本との違いを、直し方のことばにする
+   * @private
+   */
+  function endingDiffNote(stu, model, expectKind) {
+    const dTip = (stu.tipRatio || 0) - (model.tipRatio || 0);
+    const dTurn = (stu.turn || 0) - (model.turn || 0);
+
+    if (dTip < -TIP_TOL * 0.5) {
+      return expectKind === "tome"
+        ? "最後で筆を止めずに抜けています。穂先をそろえて、ぐっと止めましょう。"
+        : "筆先が細くなりすぎています。最後まで筆を紙につけたまま運びましょう。";
+    }
+
+    if (dTip > TIP_TOL * 0.5) {
+      return expectKind === "harai"
+        ? "最後が止まっています。筆をだんだん上げながら、すっと抜きましょう。"
+        : "終わりが太くふくらんでいます。筆を押しつけすぎないようにしましょう。";
+    }
+
+    if (dTurn < -TURN_TOL * 0.5 && expectKind === "hane") {
+      return "はねの向きの変わりが足りません。いちど止めてから、上へはね上げましょう。";
+    }
+
+    return KIND_ADVICE[expectKind] || "手本の筆の終わり方をもう一度見てみましょう。";
+  }
+
+  /**
    * 教材データの各画の「書き終わり」を、正規化ビットマップ上の座標に直して返す。
    *
    * 画の筆跡は start→end の向きで定義してあるので、path の最後の点が
-   * とめ・はね・はらいの出る位置になる。ImageProc.normalize() と同じ
-   * 「縦横比を保って余白8%で中央に収める」変換をかけて座標を合わせる。
+   * とめ・はね・はらいの出る位置になる。
+   *
+   * 座標は手本の墨が占める範囲に合わせる。教材データの筆跡は手描きなので、
+   * 外接矩形の縦横比が手本の字形と一致しない。余白8%で中央に収めるだけだと
+   * 「つ」のような字で位置が大きくずれ、対応する画を見つけられなくなる。
    *
    * @private
    * @returns {Array<{x:number,y:number,kind:string,name:string}>}
    */
-  function expectedEndings(charData, size) {
+  function expectedEndings(charData, size, reference) {
     if (!charData || !Array.isArray(charData.strokes)) return [];
 
     const withPath = charData.strokes.filter(
@@ -204,9 +295,16 @@ window.Scorer = (function () {
 
     const bw = Math.max(1, maxX - minX);
     const bh = Math.max(1, maxY - minY);
-    const scale = Math.min(size * 0.84 / bw, size * 0.84 / bh);
-    const offX = (size - bw * scale) / 2;
-    const offY = (size - bh * scale) / 2;
+
+    // 手本の墨の範囲。取れなければ余白8%の枠で代用する。
+    const inner = size * 0.84;
+    const bb = ImageProc.boundingBox(reference.norm, size, size);
+    const box = bb
+      ? { x: bb.minX, y: bb.minY, w: Math.max(1, bb.maxX - bb.minX), h: Math.max(1, bb.maxY - bb.minY) }
+      : { x: (size - inner) / 2, y: (size - inner) / 2, w: inner, h: inner };
+
+    const sx = box.w / bw;
+    const sy = box.h / bh;
 
     return withPath
       .filter(s => s.ending && s.ending !== "none")
@@ -217,8 +315,8 @@ window.Scorer = (function () {
       .map(s => {
         const last = s.path[s.path.length - 1];
         return {
-          x: offX + (last.x - minX) * scale,
-          y: offY + (last.y - minY) * scale,
+          x: box.x + (last.x - minX) * sx,
+          y: box.y + (last.y - minY) * sy,
           kind: s.ending,
           name: s.name || `第${s.order}画`
         };
