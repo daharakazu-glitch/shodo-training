@@ -1,336 +1,644 @@
 /*
- * レッスンページ制御ロジック
- * Canvas 描画、採点、フィードバック、文字切り替え、進捗保存を管理
+ * レッスンページ制御
  * 実装: フロントエンドエンジニア 匠(Takumi)
+ *
+ * 流れ:
+ *   文字を選ぶ → 書き順アニメーションで筆の運びを見る
+ *   → 毛筆で半紙に書く → カメラで撮影 → 文字を切り出す → 採点 → 講評
  */
 
 (function () {
-  // グローバル変数
-  const canvas = document.getElementById("drawingCanvas");
-  const ctx = canvas ? canvas.getContext("2d") : null;
-  const clearBtn = document.getElementById("clearBtn");
-  const submitBtn = document.getElementById("submitBtn");
-  const nextBtn = document.getElementById("nextBtn");
-  const feedbackPanel = document.getElementById("feedbackPanel");
+  const el = id => document.getElementById(id);
+
+  const dom = {
+    charName: el("charName"),
+    charReading: el("charReading"),
+    charExample: el("charExample"),
+    charExplain: el("charExplain"),
+    charPoint: el("charPoint"),
+
+    animCanvas: el("animCanvas"),
+    animPlayBtn: el("animPlayBtn"),
+    animStepBtn: el("animStepBtn"),
+    animAllBtn: el("animAllBtn"),
+    animCaption: el("animCaption"),
+    endingList: el("endingList"),
+
+    cameraStage: el("cameraStage"),
+    cameraVideo: el("cameraVideo"),
+    shotImage: el("shotImage"),
+    cameraGuide: el("cameraGuide"),
+    cameraPlaceholder: el("cameraPlaceholder"),
+    cameraStatus: el("cameraStatus"),
+    charCountSelect: el("charCountSelect"),
+    deviceField: el("deviceField"),
+    deviceSelect: el("deviceSelect"),
+    cameraStartBtn: el("cameraStartBtn"),
+    shootBtn: el("shootBtn"),
+    retakeBtn: el("retakeBtn"),
+    fileInput: el("fileInput"),
+    splitPreview: el("splitPreview"),
+    splitRow: el("splitRow"),
+    scoreRow: el("scoreRow"),
+    scoreBtn: el("scoreBtn"),
+
+    feedbackPanel: el("feedbackPanel"),
+    scoreCircle: el("scoreCircle"),
+    scoreNum: el("scoreNum"),
+    scoreSource: el("scoreSource"),
+    axisList: el("axisList"),
+    feedback: el("feedback"),
+    charResults: el("charResults"),
+    retryBtn: el("retryBtn"),
+    nextBtn: el("nextBtn"),
+
+    teacherState: el("teacherState"),
+    saveRefBtn: el("saveRefBtn"),
+    deleteRefBtn: el("deleteRefBtn"),
+
+    charList: el("charList")
+  };
 
   let gradeData = [];
-  let currentCharIndex = 0;
-  let userStrokes = [];
-  let currentStroke = [];
-  let isDrawing = false;
+  let grade = 1;
+  let index = 0;
+  let anim = null;
 
-  /**
+  // 直近の撮影結果
+  let shot = null;      // { imageData, dataUrl, width, height }
+  let analysis = null;  // ImageProc.processPhoto の結果
+
+  /* ============================================================
    * 初期化
-   */
-  function init() {
-    // グレードデータを取得（lesson-01.html では GRADE_DATA、lesson-02.html では GRADE_DATA_02）
-    gradeData = window.GRADE_DATA || [];
+   * ========================================================== */
 
+  function init() {
+    gradeData = window.GRADE_DATA || [];
     if (gradeData.length === 0) {
-      console.error("グレードデータが見つかりません");
+      console.error("文字データが読み込まれていません");
       return;
     }
 
-    // localStorage から最後の文字を復元
-    const currentGrade = detectGrade();
-    const saved = Progress.getGrade(currentGrade);
-    if (saved && Object.keys(saved.solved).length > 0) {
-      // 最後に解いた文字を探す
-      const lastCharId = Object.keys(saved.solved)[Object.keys(saved.solved).length - 1];
-      const foundIndex = gradeData.findIndex(c => c.id === lastCharId);
-      if (foundIndex >= 0) {
-        currentCharIndex = (foundIndex + 1) % gradeData.length;
-      }
-    }
+    grade = detectGrade();
+    index = resumeIndex();
 
-    attachEventListeners();
-    renderCharacter(currentCharIndex);
-    drawReference();
+    bindEvents();
+    renderCharacter();
     renderCharList();
   }
 
-  /**
-   * 現在のページから学年を推定
-   */
   function detectGrade() {
-    const href = window.location.href;
-    if (href.includes("lesson-02")) return 2;
-    if (href.includes("lesson-01")) return 1;
-    return 1;  // デフォルト
+    const m = window.location.href.match(/lesson-0(\d)/);
+    return m ? Number(m[1]) : 1;
   }
 
-  /**
-   * イベントリスナーをアタッチ
-   */
-  function attachEventListeners() {
-    if (!canvas) return;
+  /** 前回の続きの文字から始める */
+  function resumeIndex() {
+    const saved = Progress.getGrade(grade);
+    const solved = Object.keys(saved.solved || {});
+    if (solved.length === 0) return 0;
 
-    // Canvas イベント
-    canvas.addEventListener("mousedown", startDrawing);
-    canvas.addEventListener("mousemove", draw);
-    canvas.addEventListener("mouseup", stopDrawing);
-    canvas.addEventListener("mouseout", stopDrawing);
-
-    // タッチイベント
-    canvas.addEventListener("touchstart", handleTouch("start"));
-    canvas.addEventListener("touchmove", handleTouch("move"));
-    canvas.addEventListener("touchend", handleTouch("end"));
-
-    // ボタンイベント
-    if (clearBtn) clearBtn.addEventListener("click", clearCanvas);
-    if (submitBtn) submitBtn.addEventListener("click", submitForScoring);
-    if (nextBtn) nextBtn.addEventListener("click", nextCharacter);
+    const last = gradeData.findIndex(c => c.id === solved[solved.length - 1]);
+    return last >= 0 ? (last + 1) % gradeData.length : 0;
   }
 
-  /**
-   * 参考字を背景に描画
-   */
-  function drawReference() {
-    if (!ctx || !canvas) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const char = gradeData[currentCharIndex];
-    if (!char || !char.strokes) return;
-
-    // 薄いグレーで参考字を描画
-    ctx.globalAlpha = 0.15;
-    ctx.strokeStyle = "#999";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    char.strokes.forEach(stroke => {
-      if (stroke.start && stroke.end) {
-        ctx.beginPath();
-        ctx.moveTo(stroke.start.x, stroke.start.y);
-        ctx.lineTo(stroke.end.x, stroke.end.y);
-        ctx.stroke();
-      }
+  function bindEvents() {
+    dom.animPlayBtn.addEventListener("click", () => {
+      anim.reset();
+      anim.play();
+    });
+    dom.animStepBtn.addEventListener("click", () => anim.step());
+    dom.animAllBtn.addEventListener("click", () => {
+      anim.showAll();
+      dom.animCaption.textContent = "すべての画を書き終えた形です。";
     });
 
-    ctx.globalAlpha = 1.0;
+    dom.cameraStartBtn.addEventListener("click", startCamera);
+    dom.shootBtn.addEventListener("click", shoot);
+    dom.retakeBtn.addEventListener("click", retake);
+    dom.fileInput.addEventListener("change", onFilePicked);
+    dom.deviceSelect.addEventListener("change", () => startCamera(dom.deviceSelect.value));
+    dom.charCountSelect.addEventListener("change", () => {
+      if (shot) analyzeShot();
+    });
 
-    // ユーザーが描いた線を再描画
-    redrawUserStrokes();
+    dom.scoreBtn.addEventListener("click", runScoring);
+    dom.retryBtn.addEventListener("click", retake);
+    dom.nextBtn.addEventListener("click", nextCharacter);
+
+    dom.saveRefBtn.addEventListener("click", saveTeacherReference);
+    dom.deleteRefBtn.addEventListener("click", deleteTeacherReference);
+
+    window.addEventListener("beforeunload", () => Camera.stop());
   }
 
-  /**
-   * ユーザーが描いた線を再描画
-   */
-  function redrawUserStrokes() {
-    if (!ctx) return;
+  /* ============================================================
+   * 文字の表示
+   * ========================================================== */
 
-    ctx.strokeStyle = "#c41e3a";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+  function current() {
+    return gradeData[index];
+  }
 
-    userStrokes.forEach(stroke => {
-      if (stroke.length < 2) return;
+  function renderCharacter() {
+    const c = current();
 
-      ctx.beginPath();
-      ctx.moveTo(stroke[0].x, stroke[0].y);
+    dom.charName.textContent = c.char;
+    dom.charReading.textContent = `${c.reading}（${c.type === "hiragana" ? "ひらがな" : "漢字"}）`;
+    dom.charExample.textContent = c.word_example ? `例：${c.word_example}` : "";
+    dom.charExplain.textContent = c.explanation || "";
+    dom.charPoint.textContent = c.point ? `ポイント：${c.point}` : "";
 
-      for (let i = 1; i < stroke.length; i++) {
-        ctx.lineTo(stroke[i].x, stroke[i].y);
-      }
+    renderEndingList(c);
+    buildAnim(c);
+    renderTeacherState();
+    resetShot();
+    hide(dom.feedbackPanel);
+  }
 
-      ctx.stroke();
+  function renderEndingList(c) {
+    dom.endingList.innerHTML = "";
+
+    (c.strokes || []).forEach(s => {
+      if (!s.ending || s.ending === "none") return;
+
+      const li = document.createElement("li");
+      li.className = `ending-item kind-${s.ending}`;
+
+      const tag = document.createElement("span");
+      tag.className = "ending-tag";
+      tag.textContent = Scorer.KIND_LABEL[s.ending] || s.ending;
+
+      const body = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = `第${s.order}画 ${s.name}`;
+      const hint = document.createElement("p");
+      hint.textContent = s.hint || Scorer.KIND_ADVICE[s.ending] || "";
+
+      body.appendChild(name);
+      body.appendChild(hint);
+      li.appendChild(tag);
+      li.appendChild(body);
+      dom.endingList.appendChild(li);
     });
   }
 
-  /**
-   * マウス・タッチイベント処理
-   */
-  function startDrawing(e) {
-    if (!canvas) return;
-
-    isDrawing = true;
-    const { x, y } = getCanvasCoords(e, canvas);
-    currentStroke = [{ x, y }];
+  function buildAnim(c) {
+    anim = StrokeAnim.create(dom.animCanvas, c, {
+      onStroke(i, stroke) {
+        const kind = Scorer.KIND_LABEL[stroke.ending];
+        dom.animCaption.textContent = kind
+          ? `第${i + 1}画 ${stroke.name}（${kind}）　${stroke.hint || ""}`
+          : `第${i + 1}画 ${stroke.name}`;
+      }
+    });
+    dom.animCaption.textContent = `全${anim.strokeCount()}画です。「さいしょから見る」を押してください。`;
   }
 
-  function draw(e) {
-    if (!isDrawing || !canvas) return;
+  /* ============================================================
+   * カメラ
+   * ========================================================== */
 
-    const { x, y } = getCanvasCoords(e, canvas);
-    currentStroke.push({ x, y });
+  async function startCamera(deviceId) {
+    setStatus("カメラを起動しています…");
 
-    // リアルタイム描画
-    drawReference();
-  }
+    const res = await Camera.start(dom.cameraVideo, typeof deviceId === "string" ? deviceId : null);
 
-  function stopDrawing() {
-    if (!isDrawing) return;
-
-    if (currentStroke.length > 5) {
-      userStrokes.push(currentStroke);
+    if (!res.ok) {
+      setStatus(res.error, "error");
+      dom.shootBtn.disabled = true;
+      return;
     }
 
-    isDrawing = false;
-    currentStroke = [];
+    dom.cameraStage.classList.add("live");
+    hide(dom.cameraPlaceholder);
+    dom.shotImage.hidden = true;
+    dom.cameraVideo.hidden = false;
+    dom.shootBtn.disabled = false;
+    dom.cameraStartBtn.textContent = "カメラをつけ直す";
+    setStatus("半紙が枠いっぱいに入るようにして「撮影する」を押してください。");
+
+    await fillDeviceList();
   }
 
-  function handleTouch(phase) {
-    return (e) => {
-      e.preventDefault();
+  async function fillDeviceList() {
+    const devices = await Camera.listDevices();
+    if (devices.length < 2) {
+      dom.deviceField.hidden = true;
+      return;
+    }
 
-      const touch = e.touches[0] || e.changedTouches[0];
-      if (!touch) return;
+    dom.deviceField.hidden = false;
+    dom.deviceSelect.innerHTML = "";
 
-      const fakeEvent = {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-      };
-
-      if (phase === "start") startDrawing(fakeEvent);
-      else if (phase === "move") draw(fakeEvent);
-      else stopDrawing();
-    };
+    const currentId = Camera.currentDeviceId();
+    devices.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.textContent = d.label;
+      if (d.deviceId === currentId) opt.selected = true;
+      dom.deviceSelect.appendChild(opt);
+    });
   }
 
-  /**
-   * Canvas 座標を取得
-   */
-  function getCanvasCoords(e, canvas) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
+  function shoot() {
+    const captured = Camera.capture();
+    if (!captured) {
+      setStatus("撮影できませんでした。もう一度お試しください。", "error");
+      return;
+    }
+
+    shot = captured;
+    Camera.stop();
+    showShot();
+    analyzeShot();
   }
 
-  /**
-   * Canvas をクリア
-   */
-  function clearCanvas() {
-    userStrokes = [];
-    currentStroke = [];
-    drawReference();
+  async function onFilePicked(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    try {
+      shot = await Camera.loadFromFile(file);
+      Camera.stop();
+      showShot();
+      analyzeShot();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+
+    e.target.value = "";
   }
 
-  /**
-   * 採点実行
-   */
-  function submitForScoring() {
-    const char = gradeData[currentCharIndex];
-
-    if (!char) return;
-
-    // Canvas ImageData を取得
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    // 採点エンジンを実行
-    const scorer = new CalligraphyScorer(char, window.STROKE_ORDER_DB?.[char.char]);
-    scorer.recordUserStrokes(imageData.data, canvas.width, canvas.height);
-
-    const score = scorer.score();
-
-    // フィードバック表示
-    displayFeedback(score);
-
-    // 進捗を保存
-    const currentGrade = detectGrade();
-    Progress.setSolved(currentGrade, char.id, score);
-
-    // 文字リストを更新
-    renderCharList();
+  function showShot() {
+    dom.cameraVideo.hidden = true;
+    dom.shotImage.src = shot.dataUrl;
+    dom.shotImage.hidden = false;
+    hide(dom.cameraPlaceholder);
+    dom.cameraStage.classList.add("live");
+    dom.retakeBtn.hidden = false;
+    dom.shootBtn.disabled = true;
   }
 
-  /**
-   * フィードバック表示
-   */
-  function displayFeedback(score) {
-    const scoreNumEl = document.getElementById("scoreNum");
-    const feedbackTextEl = document.getElementById("feedback");
-    const scoreCircleEl = document.getElementById("scoreCircle");
+  function retake() {
+    resetShot();
+    hide(dom.feedbackPanel);
+    startCamera();
+  }
 
-    if (Feedback && Feedback.display) {
-      Feedback.display(score, feedbackPanel, scoreNumEl, feedbackTextEl, scoreCircleEl);
+  function resetShot() {
+    shot = null;
+    analysis = null;
+
+    Camera.stop();
+    dom.cameraStage.classList.remove("live");
+    dom.cameraVideo.hidden = false;
+    dom.shotImage.hidden = true;
+    dom.shotImage.removeAttribute("src");
+    dom.cameraPlaceholder.hidden = false;
+    dom.retakeBtn.hidden = true;
+    dom.shootBtn.disabled = true;
+    dom.cameraStartBtn.textContent = "カメラをつける";
+    hide(dom.splitPreview);
+    hide(dom.scoreRow);
+    dom.saveRefBtn.disabled = true;
+    setStatus("");
+  }
+
+  /* ============================================================
+   * 文字の切り出し
+   * ========================================================== */
+
+  function analyzeShot() {
+    const expected = Number(dom.charCountSelect.value) || 1;
+    analysis = ImageProc.processPhoto(shot.imageData, expected);
+
+    if (!analysis.chars.length) {
+      setStatus("字が見つかりませんでした。明るいところで、半紙全体を写して撮り直してください。", "error");
+      hide(dom.splitPreview);
+      hide(dom.scoreRow);
+      return;
+    }
+
+    renderSplitPreview();
+
+    if (analysis.chars.length !== expected) {
+      setStatus(
+        `${expected}字のつもりでしたが、${analysis.chars.length}字として読み取りました。` +
+        "文字の数を選び直すか、字の間をもう少し空けて撮り直してください。",
+        "warn"
+      );
     } else {
-      // フォールバック
-      scoreNumEl.textContent = score;
-      const msg = score >= 80 ? "素晴らしい！" : score >= 60 ? "よくできました！" : "もう一度トライしましょう";
-      feedbackTextEl.textContent = msg;
-      feedbackPanel.style.display = "block";
+      setStatus(`${analysis.chars.length}字を読み取りました。「採点する」を押してください。`);
     }
+
+    show(dom.scoreRow);
+    dom.saveRefBtn.disabled = analysis.chars.length !== 1;
+  }
+
+  function renderSplitPreview() {
+    dom.splitRow.innerHTML = "";
+
+    analysis.chars.forEach((ch, i) => {
+      const wrap = document.createElement("div");
+      wrap.className = "split-item";
+
+      const cv = document.createElement("canvas");
+      cv.width = 110;
+      cv.height = 110;
+      ImageProc.drawBitmap(cv.getContext("2d"), ch.norm, ch.size, "#1a1a1a", 110);
+
+      const label = document.createElement("span");
+      label.textContent = labelFor(i);
+
+      wrap.appendChild(cv);
+      wrap.appendChild(label);
+      dom.splitRow.appendChild(wrap);
+    });
+
+    show(dom.splitPreview);
   }
 
   /**
-   * 次の文字へ
+   * 切り出した字に対応するレッスン上の文字名。
+   * 1字なら今日の文字。複数字なら今日の文字から順に並んでいるものとみなす。
    */
-  function nextCharacter() {
-    currentCharIndex = (currentCharIndex + 1) % gradeData.length;
-    userStrokes = [];
-    currentStroke = [];
-    renderCharacter(currentCharIndex);
-    drawReference();
-    feedbackPanel.style.display = "none";
+  function labelFor(i) {
+    const count = analysis.chars.length;
+    if (count === 1) return current().char;
+
+    const c = gradeData[(index + i) % gradeData.length];
+    return c ? c.char : `${i + 1}字目`;
   }
 
-  /**
-   * 文字を表示
-   */
-  function renderCharacter(index) {
-    const char = gradeData[index];
-
-    if (!char) return;
-
-    document.getElementById("charName").textContent = char.char;
-
-    const readingText = char.type === "hiragana"
-      ? `${char.reading}（ひらがな）`
-      : `${char.reading}（漢字）`;
-
-    document.getElementById("charReading").textContent = readingText;
-
-    const exampleEl = document.getElementById("charExample");
-    if (exampleEl && char.word_example) {
-      exampleEl.textContent = `例: ${char.word_example}`;
-    }
+  /** 切り出した i 番目に対応する文字データ */
+  function charDataFor(i) {
+    const count = analysis.chars.length;
+    if (count === 1) return current();
+    return gradeData[(index + i) % gradeData.length] || current();
   }
 
-  /**
-   * 文字一覧をレンダリング
-   */
-  function renderCharList() {
-    const charListEl = document.getElementById("charList");
+  /* ============================================================
+   * 採点
+   * ========================================================== */
 
-    if (!charListEl) return;
+  function runScoring() {
+    if (!analysis || !analysis.chars.length) return;
 
-    charListEl.innerHTML = "";
+    const boxes = analysis.chars.map(c => c.box);
 
-    const currentGrade = detectGrade();
-    const stats = Progress.getGrade(currentGrade);
+    const results = analysis.chars.map((ch, i) => {
+      const cd = charDataFor(i);
+      const ref = Reference.getReference(cd.char, cd);
 
-    gradeData.forEach(char => {
-      const btn = document.createElement("button");
-      btn.className = "char-button";
-      btn.textContent = char.char;
-
-      // 合格済みなら solved クラスを追加
-      if (stats.mastered && stats.mastered.includes(char.id)) {
-        btn.classList.add("solved");
-      }
-
-      btn.addEventListener("click", () => {
-        const index = gradeData.findIndex(c => c.id === char.id);
-        if (index >= 0) {
-          currentCharIndex = index;
-          userStrokes = [];
-          currentStroke = [];
-          renderCharacter(currentCharIndex);
-          drawReference();
-          feedbackPanel.style.display = "none";
-        }
+      const result = Scorer.scoreCharacter(ch.norm, ch.size, ref, cd, {
+        photoW: analysis.width,
+        photoH: analysis.height,
+        box: ch.box,
+        charCount: analysis.chars.length,
+        index: i,
+        boxes
       });
 
-      charListEl.appendChild(btn);
+      result.char = cd.char;
+      result.charId = cd.id;
+      return result;
+    });
+
+    const work = Scorer.scoreWork(results);
+    renderFeedback(work, results);
+    saveProgress(results);
+    renderCharList();
+
+    dom.feedbackPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function saveProgress(results) {
+    results.forEach(r => {
+      if (!r.blank) Progress.setSolved(grade, r.charId, r.total);
     });
   }
 
-  // DOM ready
+  function renderFeedback(work, results) {
+    show(dom.feedbackPanel);
+
+    dom.scoreNum.textContent = work.total;
+    dom.scoreCircle.textContent = work.total;
+    dom.scoreCircle.style.background = Feedback.colorFor(work.total);
+    dom.scoreCircle.style.color = Feedback.textColorFor(work.total);
+
+    const source = results[0] && results[0].referenceSource === "teacher"
+      ? "先生のお手本と比べて採点しました。"
+      : "明朝体の骨格をもとに採点しました（先生のお手本を登録すると、より書道らしく採点します）。";
+    dom.scoreSource.textContent = source;
+
+    renderAxes(results);
+    renderComments(work, results);
+    renderCharResults(results);
+  }
+
+  /** 3つの観点を平均してバーで見せる */
+  function renderAxes(results) {
+    const valid = results.filter(r => !r.blank);
+    dom.axisList.innerHTML = "";
+
+    if (valid.length === 0) return;
+
+    const avg = key => Math.round(
+      valid.reduce((s, r) => s + r[key].score, 0) / valid.length
+    );
+
+    [
+      { label: "とめ・はね・はらい", value: avg("ending"), weight: "40%" },
+      { label: "字形・骨格", value: avg("shape"), weight: "40%" },
+      { label: "配置・余白", value: avg("layout"), weight: "20%" }
+    ].forEach(axis => {
+      const li = document.createElement("li");
+      li.className = "axis-item";
+
+      const head = document.createElement("div");
+      head.className = "axis-head";
+      head.innerHTML =
+        `<span>${axis.label}<small>（${axis.weight}）</small></span><strong>${axis.value}</strong>`;
+
+      const bar = document.createElement("div");
+      bar.className = "axis-bar";
+      const fill = document.createElement("div");
+      fill.className = "axis-fill";
+      fill.style.width = `${axis.value}%`;
+      fill.style.background = Feedback.colorFor(axis.value);
+      bar.appendChild(fill);
+
+      li.appendChild(head);
+      li.appendChild(bar);
+      dom.axisList.appendChild(li);
+    });
+  }
+
+  function renderComments(work, results) {
+    dom.feedback.innerHTML = "";
+
+    const lines = [];
+    if (work.comment) lines.push(work.comment);
+    results.forEach(r => (r.comments || []).forEach(c => lines.push(c)));
+
+    // 同じ助言が並ばないようにする
+    const seen = new Set();
+    lines.forEach(line => {
+      if (seen.has(line)) return;
+      seen.add(line);
+
+      const p = document.createElement("p");
+      p.textContent = line;
+      dom.feedback.appendChild(p);
+    });
+  }
+
+  /** 文字ごとの「とめ・はね・はらい」の○× */
+  function renderCharResults(results) {
+    dom.charResults.innerHTML = "";
+
+    results.forEach(r => {
+      const box = document.createElement("div");
+      box.className = "char-result";
+
+      const head = document.createElement("div");
+      head.className = "char-result-head";
+      head.innerHTML = `<span class="crc">${r.char}</span><strong>${r.total}点</strong>`;
+      box.appendChild(head);
+
+      if (r.blank) {
+        const p = document.createElement("p");
+        p.textContent = "この字は読み取れませんでした。";
+        box.appendChild(p);
+        dom.charResults.appendChild(box);
+        return;
+      }
+
+      const ul = document.createElement("ul");
+      ul.className = "check-list";
+
+      (r.ending.items || []).forEach(it => {
+        const li = document.createElement("li");
+        li.className = it.ok ? "ok" : "ng";
+        li.innerHTML =
+          `<span class="mark">${it.ok ? "○" : "△"}</span>` +
+          `<span>${it.name}（${Scorer.KIND_LABEL[it.expect] || it.expect}）</span>`;
+        ul.appendChild(li);
+      });
+
+      if (ul.children.length) box.appendChild(ul);
+      dom.charResults.appendChild(box);
+    });
+  }
+
+  /* ============================================================
+   * 先生用：お手本の登録
+   * ========================================================== */
+
+  function renderTeacherState() {
+    const char = current().char;
+    const has = Reference.hasTeacherReference(char);
+
+    dom.teacherState.innerHTML = "";
+    dom.deleteRefBtn.hidden = !has;
+
+    const p = document.createElement("p");
+    p.className = has ? "state-on" : "state-off";
+    p.textContent = has
+      ? `「${char}」のお手本は登録済みです。`
+      : `「${char}」のお手本はまだ登録されていません。`;
+    dom.teacherState.appendChild(p);
+
+    if (!has) return;
+
+    const ref = Reference.loadTeacherReference(char);
+    if (ref && ref.thumb) {
+      const img = document.createElement("img");
+      img.className = "ref-thumb";
+      img.src = ref.thumb;
+      img.alt = `${char}のお手本`;
+      dom.teacherState.appendChild(img);
+    }
+  }
+
+  async function saveTeacherReference() {
+    if (!analysis || analysis.chars.length !== 1) return;
+
+    const char = current().char;
+    const ch = analysis.chars[0];
+    const thumb = await Camera.cropThumb(shot.dataUrl, ch.box, 120);
+
+    const res = Reference.saveTeacherReference(char, ch.norm, thumb);
+
+    if (!res.ok) {
+      setStatus(res.error, "error");
+      return;
+    }
+
+    setStatus(res.error || `「${char}」のお手本を登録しました。`, res.error ? "warn" : "ok");
+    renderTeacherState();
+  }
+
+  function deleteTeacherReference() {
+    const char = current().char;
+    Reference.deleteTeacherReference(char);
+    setStatus(`「${char}」のお手本を消しました。`);
+    renderTeacherState();
+  }
+
+  /* ============================================================
+   * 文字の切り替え
+   * ========================================================== */
+
+  function nextCharacter() {
+    index = (index + 1) % gradeData.length;
+    renderCharacter();
+    renderCharList();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function renderCharList() {
+    dom.charList.innerHTML = "";
+    const stats = Progress.getGrade(grade);
+
+    gradeData.forEach((c, i) => {
+      const btn = document.createElement("button");
+      btn.className = "char-button";
+      btn.textContent = c.char;
+
+      if (i === index) btn.classList.add("active");
+      if (stats.mastered && stats.mastered.includes(c.id)) btn.classList.add("solved");
+      if (Reference.hasTeacherReference(c.char)) btn.classList.add("has-ref");
+
+      btn.addEventListener("click", () => {
+        index = i;
+        renderCharacter();
+        renderCharList();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      dom.charList.appendChild(btn);
+    });
+  }
+
+  /* ============================================================
+   * 小さなヘルパー
+   * ========================================================== */
+
+  function setStatus(text, kind) {
+    dom.cameraStatus.textContent = text || "";
+    dom.cameraStatus.className = `camera-status${kind ? " " + kind : ""}`;
+  }
+
+  function show(node) {
+    node.hidden = false;
+  }
+
+  function hide(node) {
+    node.hidden = true;
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

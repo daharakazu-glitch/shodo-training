@@ -14,43 +14,138 @@
     </header>
 
     <div class="lesson-main">
-      <!-- Canvas 描画エリア -->
-      <section class="character-card">
-        <div class="char-display">
-          <div class="char-name" id="charName">あ</div>
-          <p id="charReading">あ（ひらがな）</p>
-          <p id="charExample" class="example"></p>
-        </div>
+      <div class="lesson-col">
 
-        <div class="canvas-section">
-          <p class="instruction">灰色の文字をなぞりましょう</p>
-          <canvas id="drawingCanvas" width="400" height="400"></canvas>
-          <div class="canvas-buttons">
-            <button id="clearBtn" class="btn secondary">リセット</button>
-            <button id="submitBtn" class="btn primary">採点する</button>
-          </div>
-        </div>
-
-        <!-- フィードバック -->
-        <div id="feedbackPanel" class="feedback-panel" style="display:none;">
-          <div class="score-display">
-            <span id="scoreCircle" class="score-circle"></span>
-            <div>
-              <h3>採点結果</h3>
-              <p class="score-value"><span id="scoreNum">0</span>点</p>
+        <!-- 1. 今日の文字 -->
+        <section class="card char-card">
+          <div class="char-head">
+            <div class="char-name" id="charName">一</div>
+            <div class="char-meta">
+              <p class="char-reading" id="charReading">いち（漢字）</p>
+              <p class="char-example" id="charExample"></p>
+              <p class="char-explain" id="charExplain"></p>
             </div>
           </div>
-          <p id="feedback" class="feedback-text"></p>
-          <button id="nextBtn" class="btn primary">次の文字へ</button>
-        </div>
-      </section>
+          <p class="char-point" id="charPoint"></p>
+        </section>
+
+        <!-- 2. 書き順ととめはね -->
+        <section class="card anim-card">
+          <h2 class="card-title">１　書き順を見る</h2>
+          <p class="note">毛筆で紙に書く前に、筆の運びを目で追いましょう。</p>
+
+          <div class="anim-stage">
+            <canvas id="animCanvas" width="400" height="400"></canvas>
+          </div>
+
+          <div class="btn-row">
+            <button id="animPlayBtn" class="btn primary">さいしょから見る</button>
+            <button id="animStepBtn" class="btn secondary">１画ずつ</button>
+            <button id="animAllBtn" class="btn secondary">全部見る</button>
+          </div>
+
+          <p class="anim-caption" id="animCaption">再生ボタンを押してください。</p>
+
+          <h3 class="sub-title">この字の「とめ・はね・はらい」</h3>
+          <ul class="ending-list" id="endingList"></ul>
+        </section>
+
+        <!-- 3. 作品を撮って採点 -->
+        <section class="card camera-card">
+          <h2 class="card-title">２　書いた作品をカメラで撮る</h2>
+          <p class="note">半紙が画面いっぱいに入るように、まっすぐ上から写してください。</p>
+
+          <div class="camera-stage" id="cameraStage">
+            <video id="cameraVideo" playsinline muted></video>
+            <img id="shotImage" alt="撮影した作品" hidden>
+            <div class="camera-guide" id="cameraGuide"></div>
+            <p class="camera-placeholder" id="cameraPlaceholder">「カメラをつける」を押してください</p>
+          </div>
+
+          <div class="camera-controls">
+            <label class="field">
+              <span>文字の数</span>
+              <select id="charCountSelect">
+                <option value="1" selected>1字（大字）</option>
+                <option value="2">2字</option>
+                <option value="3">3字</option>
+                <option value="4">4字</option>
+              </select>
+            </label>
+
+            <label class="field" id="deviceField" hidden>
+              <span>使うカメラ</span>
+              <select id="deviceSelect"></select>
+            </label>
+          </div>
+
+          <div class="btn-row">
+            <button id="cameraStartBtn" class="btn primary">カメラをつける</button>
+            <button id="shootBtn" class="btn primary" disabled>撮影する</button>
+            <button id="retakeBtn" class="btn secondary" hidden>撮り直す</button>
+            <label class="btn secondary file-btn">
+              写真を読み込む
+              <input type="file" id="fileInput" accept="image/*">
+            </label>
+          </div>
+
+          <p class="camera-status" id="cameraStatus"></p>
+
+          <div class="split-preview" id="splitPreview" hidden>
+            <h3 class="sub-title">読み取った字</h3>
+            <div class="split-row" id="splitRow"></div>
+          </div>
+
+          <div class="btn-row" id="scoreRow" hidden>
+            <button id="scoreBtn" class="btn primary large">採点する</button>
+          </div>
+        </section>
+
+        <!-- 4. 採点結果 -->
+        <section class="card feedback-panel" id="feedbackPanel" hidden>
+          <h2 class="card-title">採点結果</h2>
+
+          <div class="score-display">
+            <span id="scoreCircle" class="score-circle">0</span>
+            <div class="score-body">
+              <p class="score-value"><span id="scoreNum">0</span><span class="unit">点</span></p>
+              <p class="score-source" id="scoreSource"></p>
+            </div>
+          </div>
+
+          <ul class="axis-list" id="axisList"></ul>
+
+          <div class="feedback-text" id="feedback"></div>
+
+          <div class="char-results" id="charResults"></div>
+
+          <div class="btn-row">
+            <button id="retryBtn" class="btn secondary">もう一枚書く</button>
+            <button id="nextBtn" class="btn primary">次の文字へ</button>
+          </div>
+        </section>
+
+        <!-- 5. 先生用 -->
+        <section class="card teacher-card">
+          <h2 class="card-title">先生用：お手本を登録する</h2>
+          <p class="note">
+            先生が毛筆で書いたお手本を撮影して登録すると、その字の採点はお手本と比べて行われます。
+            登録しない間は、明朝体の骨格をもとに採点します。
+          </p>
+
+          <div class="teacher-state" id="teacherState"></div>
+
+          <div class="btn-row">
+            <button id="saveRefBtn" class="btn secondary" disabled>いまの写真をお手本にする</button>
+            <button id="deleteRefBtn" class="btn secondary" hidden>お手本を消す</button>
+          </div>
+        </section>
+      </div>
 
       <!-- 文字一覧 -->
-      <aside class="character-list">
-        <h3>この学年の文字</h3>
-        <div id="charList" class="char-buttons">
-          <!-- JS で生成 -->
-        </div>
+      <aside class="card character-list">
+        <h3 class="sub-title">この学年の文字</h3>
+        <div id="charList" class="char-buttons"></div>
       </aside>
     </div>
 
@@ -62,9 +157,12 @@
   <script src="js/storage.js"></script>
   <script src="data/grades-meta.js"></script>
   <script src="data/grade02.js"></script>
-  <script src="data/strokes-db.js"></script>
+  <script src="js/imageproc.js"></script>
+  <script src="js/reference.js"></script>
   <script src="js/scorer.js"></script>
   <script src="js/feedback.js"></script>
+  <script src="js/strokeanim.js"></script>
+  <script src="js/camera.js"></script>
   <script src="js/lesson.js"></script>
 </body>
 </html>

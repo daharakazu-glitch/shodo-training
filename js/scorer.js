@@ -1,278 +1,587 @@
 /*
- * 採点エンジン
+ * 採点エンジン（毛筆作品の写真を採点する）
  * 実装: フロントエンドエンジニア 匠(Takumi)
- * Canvas から取得した字形と標準筆画順序を比較して 100 点満点で採点
  *
- * 採点式:
- *   総得点 = 100
- *     - (100 - shapeScore) × 0.7  (字形: 70%)
- *     - (100 - strokeOrderScore) × 0.2  (筆画順序: 20%)
- *     - (100 - fluidnessScore) × 0.1  (流暢性: 10%)
+ * 3つの観点で採点し、重み付けして 100 点満点にまとめる。
+ *   1. とめ・はね・はらい (40%) … 筆画の終わり方。先生が最も教えたい部分。
+ *   2. 字形・骨格        (40%) … 手本との形の一致度。
+ *   3. 配置・余白        (20%) … 半紙の中での大きさ・位置・傾き。
+ *
+ * 採点は ImageProc.NORM_SIZE の正規化ビットマップ上で行う。
  */
 
-window.CalligraphyScorer = (function () {
-  class Scorer {
-    constructor(charData, strokeOrderDB) {
-      this.charData = charData;           // 文字データ { char, strokes, boundingBox, ... }
-      this.strokeOrderDB = strokeOrderDB; // 標準筆画情報
-      this.userStrokes = [];              // ユーザーが描いたストロークの配列
-      this.score = 0;
+window.Scorer = (function () {
+  const W_ENDING = 0.40;
+  const W_SHAPE  = 0.40;
+  const W_LAYOUT = 0.20;
+
+  const KIND_LABEL = {
+    tome:  "とめ",
+    hane:  "はね",
+    harai: "はらい"
+  };
+
+  const KIND_ADVICE = {
+    tome:  "筆を紙につけたまま、最後にぐっと止めましょう。",
+    hane:  "最後に筆先を上へ跳ね上げましょう。",
+    harai: "だんだん力をぬきながら、筆を払って細くしていきましょう。"
+  };
+
+  /* ============================================================
+   * 本体
+   * ========================================================== */
+
+  /**
+   * 1文字を採点する
+   *
+   * @param {Uint8Array} studentNorm 生徒の正規化ビットマップ
+   * @param {number} size 一辺
+   * @param {Object} reference Reference.getReference() の戻り値
+   * @param {Object} charData data/gradeNN.js の文字データ
+   * @param {Object} layout  配置評価用の情報
+   *        { photoW, photoH, box, charCount, index, boxes }
+   * @returns {Object} 採点結果
+   */
+  function scoreCharacter(studentNorm, size, reference, charData, layout) {
+    const ink = ImageProc.inkCount(studentNorm);
+
+    // 墨がほとんど無い＝未提出とみなす
+    if (ink < size * 2) {
+      return {
+        total: 0,
+        blank: true,
+        ending: { score: 0, acc: 0, items: [] },
+        shape:  { score: 0, acc: 0, iou: 0, tilt: 0 },
+        layout: { score: 0, acc: 0, notes: [] },
+        comments: ["字が写っていないようです。半紙が画面いっぱいに入るように撮り直してみましょう。"],
+        referenceSource: reference.source
+      };
     }
 
-    /**
-     * ユーザーの描画ストロークを記録
-     * @param {Uint8ClampedArray} canvasImageData - Canvas の ImageData ピクセルデータ
-     * @param {number} width - Canvas 幅
-     * @param {number} height - Canvas 高さ
-     */
-    recordUserStrokes(canvasImageData, width, height) {
-      // Canvas ImageData からストローク（黒ピクセルの連続）を抽出
-      this.userStrokes = this.extractStrokesFromImageData(canvasImageData, width, height);
-    }
+    const ending = scoreEndings(studentNorm, size, reference, charData);
+    const shape  = scoreShape(studentNorm, size, reference);
+    const lay    = scoreLayout(studentNorm, size, layout);
 
-    /**
-     * Canvas ImageData からストロークを抽出
-     * @private
-     */
-    extractStrokesFromImageData(imageData, width, height) {
-      const strokes = [];
-      const pixels = new Uint8Array(imageData);
-      const visited = new Set();
+    let total = ending.score * W_ENDING + shape.score * W_SHAPE + lay.score * W_LAYOUT;
 
-      // 各ピクセルをスキャン
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          const alpha = pixels[idx + 3];
+    // 満点はすべての観点がほぼ完璧なときだけ
+    const allPerfect = ending.acc >= 0.97 && shape.acc >= 0.97 && lay.acc >= 0.97;
+    total = allPerfect ? 100 : Math.min(99, Math.round(total));
 
-          // 描画されたピクセル（アルファ > 128）
-          if (alpha > 128 && !visited.has(`${x},${y}`)) {
-            // 新しいストロークの開始
-            const stroke = this.traceStroke(pixels, width, height, x, y, visited);
-            if (stroke.length > 3) {
-              strokes.push(stroke);
-            }
-          }
-        }
-      }
-
-      return strokes;
-    }
-
-    /**
-     * 連続したピクセルをトレース（ストロークを取得）
-     * @private
-     */
-    traceStroke(pixels, width, height, startX, startY, visited) {
-      const stroke = [];
-      const queue = [[startX, startY]];
-
-      while (queue.length > 0) {
-        const [x, y] = queue.shift();
-        const key = `${x},${y}`;
-
-        if (visited.has(key)) continue;
-        if (x < 0 || x >= width || y < 0 || y >= height) continue;
-
-        const idx = (y * width + x) * 4;
-        const alpha = pixels[idx + 3];
-
-        if (alpha <= 128) continue;
-
-        visited.add(key);
-        stroke.push({ x, y });
-
-        // 8 近傍のピクセルをキューに追加（接続性確保）
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            queue.push([x + dx, y + dy]);
-          }
-        }
-      }
-
-      return stroke;
-    }
-
-    /**
-     * 総合採点を実行
-     * @returns {number} スコア（0-100）
-     */
-    score() {
-      if (this.userStrokes.length === 0) {
-        return 0;  // 何も描いていない
-      }
-
-      const shapeScore = this.scoreShape();
-      const strokeOrderScore = this.scoreStrokeOrder();
-      const fluidnessScore = this.scoreFluidness();
-
-      // 加重スコア（70%, 20%, 10%）
-      const totalScore = 100 -
-        ((100 - shapeScore) * 0.7 +
-         (100 - strokeOrderScore) * 0.2 +
-         (100 - fluidnessScore) * 0.1);
-
-      this.score = Math.round(Math.max(0, Math.min(100, totalScore)));
-      return this.score;
-    }
-
-    /**
-     * 字形スコア（70%）
-     * @private
-     */
-    scoreShape() {
-      // 参照字とユーザー描画のピクセル重複度を計算
-
-      if (!this.charData || !this.charData.boundingBox) {
-        return 50;  // デフォルト値
-      }
-
-      // ユーザーの Bounding Box を計算
-      const userBB = this.calculateBoundingBox(this.userStrokes);
-      if (!userBB) return 0;
-
-      // 参考字の Bounding Box
-      const refBB = this.charData.boundingBox;
-
-      // ユーザーの描画を参照枠に正規化
-      const scale = Math.min(
-        (refBB.maxX - refBB.minX) / (userBB.maxX - userBB.minX),
-        (refBB.maxY - refBB.minY) / (userBB.maxY - userBB.minY)
-      ) * 0.95;
-
-      const normalizedStrokes = this.userStrokes.map(stroke =>
-        stroke.map(p => ({
-          x: refBB.minX + (p.x - userBB.minX) * scale,
-          y: refBB.minY + (p.y - userBB.minY) * scale
-        }))
-      );
-
-      // Jaccard Index で重複度を計算
-      const userPixels = this.strokestoPixelSet(normalizedStrokes);
-      const refPixels = new Set(
-        (this.charData.reference_pixels || []).map(p => `${p.x},${p.y}`)
-      );
-
-      const intersection = [...userPixels].filter(p => refPixels.has(p)).length;
-      const union = new Set([...userPixels, ...refPixels]).size;
-
-      const overlapRatio = union > 0 ? intersection / union : 0;
-      let shapeScore = overlapRatio * 100;
-
-      // 枠外描画の減点
-      const extraPixels = userPixels.size - intersection;
-      const extraPenalty = (extraPixels / Math.max(1, userPixels.size)) * 20;
-
-      return Math.max(0, shapeScore - extraPenalty);
-    }
-
-    /**
-     * 筆画順序スコア（20%）
-     * @private
-     */
-    scoreStrokeOrder() {
-      const refStrokes = (this.charData.strokes || []);
-
-      if (refStrokes.length === 0) {
-        return 100;
-      }
-
-      // ストローク数の一致度
-      const strokeCountMatch = Math.min(
-        1,
-        this.userStrokes.length / refStrokes.length
-      );
-
-      if (this.userStrokes.length === 0) {
-        return 0;
-      }
-
-      // 完全一致: 100%, 1本多い/少ない: 85%, 2本以上: 60%
-      let strokeScore = 100;
-      const diff = Math.abs(this.userStrokes.length - refStrokes.length);
-
-      if (diff === 0) strokeScore = 100;
-      else if (diff === 1) strokeScore = 85;
-      else if (diff <= 2) strokeScore = 70;
-      else strokeScore = 50;
-
-      return strokeScore;
-    }
-
-    /**
-     * 流暢性スコア（10%）
-     * @private
-     */
-    scoreFluidness() {
-      let fluidityScore = 100;
-
-      // ストロークの本数（多すぎるのは不自然）
-      const strokeCount = this.userStrokes.length;
-      if (strokeCount > 15) {
-        fluidityScore -= Math.min(30, (strokeCount - 15) * 2);
-      }
-
-      // 各ストロークの長さを確認（短すぎるのは不自然）
-      let shortStrokes = 0;
-      this.userStrokes.forEach(stroke => {
-        if (stroke.length < 5) {
-          shortStrokes++;
-        }
-      });
-
-      if (shortStrokes > strokeCount * 0.5) {
-        fluidityScore -= 20;
-      }
-
-      return Math.max(0, fluidityScore);
-    }
-
-    /**
-     * Bounding Box を計算
-     * @private
-     */
-    calculateBoundingBox(strokes) {
-      if (strokes.length === 0) return null;
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-      strokes.forEach(stroke => {
-        stroke.forEach(p => {
-          minX = Math.min(minX, p.x);
-          minY = Math.min(minY, p.y);
-          maxX = Math.max(maxX, p.x);
-          maxY = Math.max(maxY, p.y);
-        });
-      });
-
-      if (minX === Infinity) return null;
-
-      return { minX, minY, maxX, maxY };
-    }
-
-    /**
-     * ストロークをピクセルセットに変換
-     * @private
-     */
-    strokestoPixelSet(strokes) {
-      const pixels = new Set();
-
-      strokes.forEach(stroke => {
-        stroke.forEach(p => {
-          const key = `${Math.round(p.x)},${Math.round(p.y)}`;
-          pixels.add(key);
-        });
-      });
-
-      return pixels;
-    }
+    return {
+      total,
+      blank: false,
+      ending,
+      shape,
+      layout: lay,
+      comments: buildComments(total, ending, shape, lay),
+      referenceSource: reference.source
+    };
   }
 
-  return Scorer;
-})();
+  /* ============================================================
+   * 1. とめ・はね・はらい
+   * ========================================================== */
 
-// エクスポート
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CalligraphyScorer;
-}
+  /**
+   * 筆画の終わり方を手本と比べる。
+   *
+   * 手本の端点それぞれについて、生徒の作品で最も近い端点を探し、
+   * 終わり方の種別（とめ/はね/はらい）が一致しているかを見る。
+   */
+  function scoreEndings(studentNorm, size, reference, charData) {
+    const stuEndings = ImageProc.analyzeStrokeEndings(studentNorm, size, size);
+
+    // 評価の基準。教材データに画の終わり（とめ・はね・はらい）が定義されていれば
+    // それを使う。無ければ手本の写真から取れた端点で代用する。
+    const targets = expectedEndings(charData, size);
+    const refEndings = sortReadingOrder(reference.endings || [], size);
+    const basis = targets.length ? targets : refEndings;
+
+    if (basis.length === 0) {
+      // 手本から筆画の終わりが取れなかった場合は評価対象外（満点扱い）
+      return { score: 100, acc: 1, items: [], skipped: true };
+    }
+
+    const maxDist = size * 0.26; // これより離れていれば「対応する画が無い」と判断
+    const used = new Set();
+    const items = [];
+
+    basis.forEach(ref => {
+      const expectKind = ref.kind;
+      const name = ref.name || positionName(ref.x, ref.y, size);
+
+      // 最も近い生徒の端点を探す
+      let best = -1;
+      let bestD = Infinity;
+
+      stuEndings.forEach((s, j) => {
+        if (used.has(j)) return;
+        const d = Math.hypot(s.x - ref.x, s.y - ref.y);
+        if (d < bestD) {
+          bestD = d;
+          best = j;
+        }
+      });
+
+      if (best < 0 || bestD > maxDist) {
+        items.push({
+          name,
+          expect: expectKind,
+          actual: null,
+          ok: false,
+          credit: 0,
+          advice: `${name}が見つかりませんでした。${KIND_LABEL[expectKind] || ""}をはっきり書いてみましょう。`
+        });
+        return;
+      }
+
+      used.add(best);
+      const stu = stuEndings[best];
+      const ok = stu.kind === expectKind;
+
+      // 種別が違っても、筆画自体は書けているので部分点を与える
+      const credit = ok ? 1 : 0.35;
+
+      items.push({
+        name,
+        expect: expectKind,
+        actual: stu.kind,
+        ok,
+        credit,
+        tipRatio: stu.tipRatio,
+        advice: ok
+          ? `${name}の${KIND_LABEL[expectKind]}がよく書けています。`
+          : `${name}は「${KIND_LABEL[expectKind]}」ですが、「${KIND_LABEL[stu.kind]}」になっています。${KIND_ADVICE[expectKind] || ""}`
+      });
+    });
+
+    // 手本より多く端点がある＝余分な線やはみ出しがある。
+    // 筆画の始まりも端点として出るため、手本の端点数を基準にする。
+    const allowed = refEndings.length || basis.length * 2;
+    const extra = Math.max(0, stuEndings.length - allowed);
+
+    let acc = items.length
+      ? items.reduce((s, it) => s + it.credit, 0) / items.length
+      : 0;
+
+    // 余分な筆画はわずかに減点（最大 0.12）
+    acc = Math.max(0, acc - Math.min(0.12, extra * 0.04));
+
+    return {
+      score: toScore(acc),
+      acc,
+      items,
+      extra
+    };
+  }
+
+  /**
+   * 教材データの各画の「書き終わり」を、正規化ビットマップ上の座標に直して返す。
+   *
+   * 画の筆跡は start→end の向きで定義してあるので、path の最後の点が
+   * とめ・はね・はらいの出る位置になる。ImageProc.normalize() と同じ
+   * 「縦横比を保って余白8%で中央に収める」変換をかけて座標を合わせる。
+   *
+   * @private
+   * @returns {Array<{x:number,y:number,kind:string,name:string}>}
+   */
+  function expectedEndings(charData, size) {
+    if (!charData || !Array.isArray(charData.strokes)) return [];
+
+    const withPath = charData.strokes.filter(
+      s => Array.isArray(s.path) && s.path.length >= 2
+    );
+    if (withPath.length === 0) return [];
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    withPath.forEach(s => s.path.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }));
+
+    const bw = Math.max(1, maxX - minX);
+    const bh = Math.max(1, maxY - minY);
+    const scale = Math.min(size * 0.84 / bw, size * 0.84 / bh);
+    const offX = (size - bw * scale) / 2;
+    const offY = (size - bh * scale) / 2;
+
+    return withPath
+      .filter(s => s.ending && s.ending !== "none")
+      // 他の画の上で終わる画（「工」の中のたて画など）は、写真では交点に
+      // なってしまい筆の終わり方が見えない。採点対象から外す。
+      .filter(s => !endsOnAnotherStroke(s, withPath))
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map(s => {
+        const last = s.path[s.path.length - 1];
+        return {
+          x: offX + (last.x - minX) * scale,
+          y: offY + (last.y - minY) * scale,
+          kind: s.ending,
+          name: s.name || `第${s.order}画`
+        };
+      });
+  }
+
+  /**
+   * 画の終わりの点が、他の画の線上にあるかどうか
+   * @private
+   */
+  function endsOnAnotherStroke(stroke, all) {
+    const last = stroke.path[stroke.path.length - 1];
+    const near = 14; // 教材データの座標系(0〜400)での許容距離
+
+    return all.some(other => {
+      if (other === stroke) return false;
+
+      for (let i = 1; i < other.path.length; i++) {
+        if (pointToSegment(last, other.path[i - 1], other.path[i]) <= near) return true;
+      }
+      return false;
+    });
+  }
+
+  /**
+   * 点と線分の距離
+   * @private
+   */
+  function pointToSegment(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+
+    let t = len2 === 0 ? 0 : ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+
+    return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
+  }
+
+  /**
+   * 端点を読む順（上から下、同じ高さなら左から右）に並べる
+   * @private
+   */
+  function sortReadingOrder(endings, size) {
+    const band = size * 0.18; // この範囲内の高さは「同じ高さ」とみなす
+
+    return endings.slice().sort((a, b) => {
+      const ra = Math.floor(a.y / band);
+      const rb = Math.floor(b.y / band);
+      if (ra !== rb) return ra - rb;
+      return a.x - b.x;
+    });
+  }
+
+  /**
+   * 位置から呼び名を作る（教材データに名前が無いとき用）
+   * @private
+   */
+  function positionName(x, y, size) {
+    const v = y < size * 0.34 ? "上" : (y > size * 0.66 ? "下" : "中ほど");
+    const hz = x < size * 0.34 ? "左" : (x > size * 0.66 ? "右" : "");
+    return `${v}${hz}のあたりの画`;
+  }
+
+  /* ============================================================
+   * 2. 字形・骨格
+   * ========================================================== */
+
+  /**
+   * 手本との形の一致度を見る。
+   * 撮影のわずかなずれは許容し、重なり率が最大になる位置で評価する。
+   */
+  function scoreShape(studentNorm, size, reference) {
+    const iou = ImageProc.bestIou(studentNorm, reference.norm, size);
+
+    // 満点ラインは文字ごとに違う（画の少ない字は重なり率が上がりにくい）。
+    // 手本側で計算した上限があればそれを使い、無ければ手本の種類で決める。
+    const range = shapeRange(reference);
+
+    let acc = (iou - range.lo) / (range.hi - range.lo);
+    acc = Math.max(0, Math.min(1, acc));
+
+    // 傾きの差
+    const mStu = ImageProc.moments(studentNorm, size, size);
+    const mRef = ImageProc.moments(reference.norm, size, size);
+    const tilt = Math.abs(normalizeAngle(mStu.angle - mRef.angle));
+
+    // 8度を超えたぶんを減点（最大 0.15）
+    const tiltPenalty = Math.min(0.15, Math.max(0, (tilt - 8) / 100));
+    acc = Math.max(0, acc - tiltPenalty);
+
+    // 墨の量の差（太すぎ・細すぎ）
+    const inkStu = mStu.ink;
+    const inkRef = Math.max(1, mRef.ink);
+    const inkRatio = inkStu / inkRef;
+
+    let inkNote = null;
+    if (inkRatio > 1.55) inkNote = "線が太すぎるようです。筆の墨を少し落としてみましょう。";
+    else if (inkRatio < 0.55) inkNote = "線が細すぎるようです。筆にしっかり墨をつけて、太く書いてみましょう。";
+
+    return {
+      score: toScore(acc),
+      acc,
+      iou: round3(iou),
+      tilt: Math.round(tilt),
+      inkRatio: round3(inkRatio),
+      inkNote
+    };
+  }
+
+  /**
+   * 重なり率を精度(0..1)に直すときの下限・上限
+   * @private
+   */
+  function shapeRange(reference) {
+    const c = reference.ceiling;
+
+    if (typeof c === "number" && isFinite(c) && c > 0) {
+      // 極端な値は丸める（教材データの不備で上限が壊れても採点が崩れないように）
+      const hi = Math.max(0.18, Math.min(0.80, c));
+      return { lo: hi * 0.35, hi };
+    }
+
+    return reference.source === "teacher"
+      ? { lo: 0.30, hi: 0.76 }
+      : { lo: 0.22, hi: 0.62 };
+  }
+
+  function normalizeAngle(a) {
+    while (a > 90) a -= 180;
+    while (a < -90) a += 180;
+    return a;
+  }
+
+  /* ============================================================
+   * 3. 配置・余白
+   * ========================================================== */
+
+  /**
+   * 半紙の中での大きさ・位置・傾きを見る。
+   * 「半紙が画面いっぱいに写っている」ことを前提に、写真の枠を半紙の枠として扱う。
+   */
+  function scoreLayout(studentNorm, size, layout) {
+    const notes = [];
+
+    if (!layout || !layout.box || !layout.photoW) {
+      return { score: 100, acc: 1, notes: [], skipped: true };
+    }
+
+    const { photoW, photoH, box } = layout;
+    const shortSide = Math.min(photoW, photoH);
+
+    const bw = box.maxX - box.minX + 1;
+    const bh = box.maxY - box.minY + 1;
+
+    // --- 大きさ ---
+    // 1文字なら半紙の短辺の 55〜85% が目安。複数文字なら1文字分に割って考える。
+    const count = Math.max(1, layout.charCount || 1);
+    const expected = count > 1 ? 0.9 / count : 0.70;
+    const sizeRatio = Math.max(bw, bh) / shortSide;
+
+    let sizeAcc = 1 - Math.abs(sizeRatio - expected) / (expected * 0.75);
+    sizeAcc = Math.max(0, Math.min(1, sizeAcc));
+
+    if (sizeRatio < expected * 0.65) notes.push("字が小さいようです。半紙いっぱいに大きく書いてみましょう。");
+    else if (sizeRatio > expected * 1.35) notes.push("字が大きすぎて余白が少ないようです。少し小さめに書いてみましょう。");
+
+    // --- 位置（中心のずれ） ---
+    const cx = (box.minX + box.maxX) / 2;
+    const cy = (box.minY + box.maxY) / 2;
+
+    // 複数文字のときは自分の持ち場の中心と比べる
+    const target = cellCenter(layout, photoW, photoH);
+
+    const offX = (cx - target.x) / photoW;
+    const offY = (cy - target.y) / photoH;
+    const off = Math.hypot(offX, offY);
+
+    let posAcc = 1 - off / 0.18;
+    posAcc = Math.max(0, Math.min(1, posAcc));
+
+    if (off > 0.09) {
+      const dir = [];
+      if (offX < -0.05) dir.push("左");
+      if (offX > 0.05) dir.push("右");
+      if (offY < -0.05) dir.push("上");
+      if (offY > 0.05) dir.push("下");
+      if (dir.length) notes.push(`字が${dir.join("")}によっています。中央に書いてみましょう。`);
+    }
+
+    // --- 傾き ---
+    const m = ImageProc.moments(studentNorm, size, size);
+    const tilt = Math.abs(normalizeAngle(m.angle));
+    let tiltAcc = 1 - Math.max(0, tilt - 6) / 24;
+    tiltAcc = Math.max(0, Math.min(1, tiltAcc));
+
+    if (tilt > 10) notes.push("字が傾いています。半紙をまっすぐ置いて書いてみましょう。");
+
+    const acc = sizeAcc * 0.45 + posAcc * 0.35 + tiltAcc * 0.20;
+
+    return {
+      score: toScore(acc),
+      acc,
+      sizeRatio: round3(sizeRatio),
+      offset: round3(off),
+      tilt: Math.round(tilt),
+      notes
+    };
+  }
+
+  /**
+   * 複数文字のとき、その文字が収まるべき区画の中心を返す
+   * @private
+   */
+  function cellCenter(layout, photoW, photoH) {
+    const count = Math.max(1, layout.charCount || 1);
+    const index = layout.index || 0;
+
+    if (count === 1) {
+      return { x: photoW / 2, y: photoH / 2 };
+    }
+
+    // 縦書きか横書きかは、文字の並び方から判断する
+    const boxes = layout.boxes || [];
+    const vertical = isVertical(boxes);
+
+    if (vertical) {
+      const cell = photoH / count;
+      return { x: photoW / 2, y: cell * (index + 0.5) };
+    }
+
+    const cell = photoW / count;
+    return { x: cell * (index + 0.5), y: photoH / 2 };
+  }
+
+  /**
+   * 文字の並びが縦方向かどうか
+   * @private
+   */
+  function isVertical(boxes) {
+    if (boxes.length < 2) return true;
+
+    let spreadX = 0;
+    let spreadY = 0;
+
+    for (let i = 1; i < boxes.length; i++) {
+      spreadX += Math.abs(
+        (boxes[i].minX + boxes[i].maxX) / 2 - (boxes[i - 1].minX + boxes[i - 1].maxX) / 2
+      );
+      spreadY += Math.abs(
+        (boxes[i].minY + boxes[i].maxY) / 2 - (boxes[i - 1].minY + boxes[i - 1].maxY) / 2
+      );
+    }
+
+    return spreadY >= spreadX;
+  }
+
+  /* ============================================================
+   * 講評の組み立て
+   * ========================================================== */
+
+  /**
+   * 生徒に見せる言葉を作る。
+   * ほめる点を先に、直す点はひとつに絞って具体的に伝える。
+   */
+  function buildComments(total, ending, shape, layout) {
+    const out = [];
+
+    // 総評
+    if (total >= 95) out.push("たいへんよく書けています。手本に近い、いきいきとした字です。");
+    else if (total >= 85) out.push("よく書けています。筆の運びがしっかりしています。");
+    else if (total >= 70) out.push("なかなかよい字です。あと少しで手本に近づきます。");
+    else if (total >= 55) out.push("よくがんばりました。直すところを1つ意識して、もう一枚書いてみましょう。");
+    else out.push("まずは手本をよく見て、ゆっくり書いてみましょう。");
+
+    // ほめる点
+    const okItems = (ending.items || []).filter(it => it.ok);
+    if (okItems.length > 0) {
+      out.push(okItems[0].advice);
+    }
+
+    // 直す点（とめはねを最優先）
+    const ngItems = (ending.items || []).filter(it => !it.ok);
+    if (ngItems.length > 0) {
+      out.push(ngItems[0].advice);
+      if (ngItems.length > 1) {
+        out.push(`ほかに ${ngItems.length - 1} か所、筆の終わり方を直すところがあります。`);
+      }
+    }
+
+    // 線の太さ
+    if (shape.inkNote) out.push(shape.inkNote);
+
+    // 配置
+    if (layout.notes && layout.notes.length) out.push(layout.notes[0]);
+
+    return out;
+  }
+
+  /* ============================================================
+   * 補助
+   * ========================================================== */
+
+  /**
+   * 精度(0..1) を点数に変換する。
+   * 小学生向けに、努力が点に表れやすい甘めの曲線にする。
+   *   acc 0.0 → 45点 / 0.5 → 76点 / 0.8 → 90点 / 1.0 → 100点
+   */
+  function toScore(acc) {
+    const a = Math.max(0, Math.min(1, acc));
+    return 45 + 55 * Math.pow(a, 0.8);
+  }
+
+  function round3(v) {
+    return Math.round(v * 1000) / 1000;
+  }
+
+  /**
+   * 作品全体（複数文字）の採点をまとめる
+   *
+   * @param {Array} results scoreCharacter の結果の配列
+   * @returns {{total:number, balance:number, comment:string}}
+   */
+  function scoreWork(results) {
+    const valid = results.filter(r => !r.blank);
+
+    if (valid.length === 0) {
+      return { total: 0, balance: 0, comment: "字が読み取れませんでした。" };
+    }
+
+    const avg = valid.reduce((s, r) => s + r.total, 0) / valid.length;
+
+    // 文字どうしの出来のばらつき（複数文字のときだけ見る）
+    let balance = 100;
+    let comment = "";
+
+    if (valid.length > 1) {
+      const scores = valid.map(r => r.total);
+      const max = Math.max(...scores);
+      const min = Math.min(...scores);
+      const spread = max - min;
+
+      balance = Math.max(0, 100 - spread * 1.5);
+
+      if (spread > 20) {
+        comment = "字によって出来にちがいがあります。どの字も同じ気持ちで書けるとさらによくなります。";
+      } else {
+        comment = "どの字もそろって書けています。";
+      }
+    }
+
+    // 全体点は平均を主とし、ばらつきをわずかに反映する
+    const total = valid.length > 1
+      ? Math.round(avg * 0.88 + balance * 0.12)
+      : Math.round(avg);
+
+    return { total: Math.min(100, total), balance: Math.round(balance), comment };
+  }
+
+  return {
+    scoreCharacter,
+    scoreWork,
+    KIND_LABEL,
+    KIND_ADVICE
+  };
+})();

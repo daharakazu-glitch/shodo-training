@@ -165,7 +165,7 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* ========== レッスンページ ========== */
+/* ========== レッスンページ 共通 ========== */
 
 .lesson-container {
   padding-top: 1rem;
@@ -173,7 +173,7 @@ body {
 }
 
 .lesson-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .back-link {
@@ -185,7 +185,7 @@ body {
   text-decoration: none;
   font-weight: 500;
   margin-bottom: 1rem;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 
 .back-link:hover {
@@ -199,217 +199,585 @@ body {
 
 .lesson-main {
   display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 2rem;
+  grid-template-columns: 1fr 260px;
+  gap: 1.5rem;
   margin-bottom: 3rem;
+  align-items: start;
 }
 
-/* 文字表示カード */
-.character-card {
+.lesson-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.card {
   background: white;
   padding: 1.5rem;
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.char-display {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 2px solid #e0e0e0;
-}
-
-.char-name {
-  font-size: 4rem;
-  font-weight: 700;
-  color: #c41e3a;
-  line-height: 1;
+.card-title {
+  font-size: 1.25rem;
+  color: #1a3a52;
   margin-bottom: 0.5rem;
 }
 
-.char-display p {
-  font-size: 1rem;
+.sub-title {
+  font-size: 1.05rem;
+  color: #1a3a52;
+  margin: 1.25rem 0 0.75rem;
 }
 
-.char-display .example {
+.note {
   font-size: 0.95rem;
-  color: #666;
-  margin-top: 0.5rem;
-}
-
-/* Canvas セクション */
-.canvas-section {
-  margin-bottom: 1.5rem;
-}
-
-.instruction {
-  text-align: center;
-  font-size: 1rem;
-  color: #666;
+  color: #6b6b6b;
   margin-bottom: 1rem;
-  font-weight: 500;
 }
 
-#drawingCanvas {
-  display: block;
-  width: 100%;
-  max-width: 400px;
-  height: auto;
-  margin: 0 auto 1.5rem;
-  border: 3px solid #333;
-  background: white;
-  border-radius: 8px;
-  cursor: crosshair;
-  touch-action: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+/* ========== 1. 今日の文字 ========== */
 
-.canvas-buttons {
+.char-head {
   display: flex;
-  gap: 1rem;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.char-name {
+  font-size: 5rem;
+  font-weight: 700;
+  color: #c41e3a;
+  line-height: 1;
+  flex-shrink: 0;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+}
+
+.char-meta {
+  min-width: 0;
+}
+
+.char-reading {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.char-example,
+.char-explain {
+  font-size: 0.95rem;
+  color: #6b6b6b;
+}
+
+.char-point {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fdf3e7;
+  border-left: 4px solid #d97d2c;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+/* ========== 2. 書き順アニメーション ========== */
+
+.anim-stage {
+  display: flex;
   justify-content: center;
 }
 
-/* ボタン */
+#animCanvas {
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  border: 2px solid #ded7cf;
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.anim-caption {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #1a3a52;
+  min-height: 3rem;
+}
+
+/* とめ・はね・はらい 一覧 */
+.ending-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ending-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.6rem 0.8rem;
+  background: #f7f5f2;
+  border-radius: 6px;
+}
+
+.ending-tag {
+  flex-shrink: 0;
+  min-width: 4.2rem;
+  text-align: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: white;
+}
+
+.kind-tome .ending-tag {
+  background: #1a3a52;
+}
+
+.kind-hane .ending-tag {
+  background: #c41e3a;
+}
+
+.kind-harai .ending-tag {
+  background: #2d7d3a;
+}
+
+.ending-item strong {
+  font-size: 0.95rem;
+}
+
+.ending-item p {
+  font-size: 0.9rem;
+  color: #6b6b6b;
+}
+
+/* ========== 3. カメラ ========== */
+
+.camera-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #2b2b2b;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-stage video,
+.camera-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* hidden 属性は、display を持つどの指定よりも優先する */
+[hidden] {
+  display: none !important;
+}
+
+.camera-guide {
+  position: absolute;
+  inset: 8%;
+  border: 3px dashed rgba(255, 255, 255, 0.65);
+  border-radius: 4px;
+  pointer-events: none;
+  display: none;
+}
+
+.camera-stage.live .camera-guide {
+  display: block;
+}
+
+.camera-placeholder {
+  position: absolute;
+  color: #ddd;
+  font-size: 1rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+.camera-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #6b6b6b;
+}
+
+.field select {
+  min-height: 44px;
+  padding: 0 0.6rem;
+  font-size: 1rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  max-width: 16rem;
+}
+
+.camera-status {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  min-height: 1.5rem;
+  color: #6b6b6b;
+}
+
+.camera-status.ok {
+  color: #2d7d3a;
+  font-weight: 600;
+}
+
+.camera-status.warn {
+  color: #a9611c;
+  font-weight: 600;
+}
+
+.camera-status.error {
+  color: #c41e3a;
+  font-weight: 600;
+}
+
+/* 切り出した字のプレビュー */
+.split-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.split-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.split-item canvas {
+  border: 2px solid #ded7cf;
+  border-radius: 6px;
+  background: white;
+}
+
+/* ========== ボタン ========== */
+
 .btn {
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border: none;
   border-radius: 6px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  min-width: 120px;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+  min-height: 48px;
+  min-width: 130px;
   touch-action: manipulation;
+}
+
+.btn.large {
+  font-size: 1.15rem;
+  min-width: 200px;
 }
 
 .btn.primary {
   background: #c41e3a;
   color: white;
-  min-height: 48px;
-  min-width: 140px;
 }
 
-.btn.primary:hover {
+.btn.primary:hover:not(:disabled) {
   background: #a01630;
   box-shadow: 0 4px 12px rgba(196, 30, 58, 0.3);
-}
-
-.btn.primary:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 6px rgba(196, 30, 58, 0.3);
 }
 
 .btn.secondary {
   background: #f0f0f0;
   color: #1a1a1a;
   border: 1px solid #ddd;
-  min-height: 48px;
 }
 
-.btn.secondary:hover {
-  background: #e0e0e0;
+.btn.secondary:hover:not(:disabled) {
+  background: #e3e3e3;
 }
 
-.btn.secondary:active {
+.btn:active:not(:disabled) {
   transform: scale(0.98);
 }
 
-/* フィードバックパネル */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ファイル選択をボタンの見た目にする */
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.file-btn input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ========== 4. 採点結果 ========== */
+
 .feedback-panel {
-  background: #fff3cd;
-  border-left: 4px solid #ffc107;
-  padding: 1.5rem;
-  border-radius: 6px;
-  margin-top: 1.5rem;
+  border-left: 6px solid #c41e3a;
 }
 
 .score-display {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  margin-bottom: 1rem;
+  margin: 1rem 0 1.5rem;
 }
 
 .score-circle {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
-  background: white;
+  background: #ccc;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 700;
   flex-shrink: 0;
 }
 
-.score-display h3 {
-  margin-bottom: 0.3rem;
-  font-size: 1rem;
-  color: #666;
+.score-body {
+  min-width: 0;
 }
 
 .score-value {
-  font-size: 1.8rem;
+  font-size: 2rem;
   font-weight: 700;
-  color: #c41e3a;
+  color: #1a3a52;
+  line-height: 1.2;
+}
+
+.score-value .unit {
+  font-size: 1.1rem;
+  margin-left: 0.2rem;
+}
+
+.score-source {
+  font-size: 0.9rem;
+  color: #6b6b6b;
+}
+
+/* 3観点のバー */
+.axis-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.axis-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.axis-head small {
+  color: #9b948c;
+  font-weight: 400;
+}
+
+.axis-head strong {
+  font-size: 1.1rem;
+  color: #1a3a52;
+}
+
+.axis-bar {
+  height: 14px;
+  background: #ebe7e2;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.axis-fill {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.4s ease;
 }
 
 .feedback-text {
+  background: #fff8e8;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.feedback-text p {
   font-size: 1rem;
-  margin-bottom: 1rem;
-  line-height: 1.6;
+  margin-bottom: 0.5rem;
 }
 
-.feedback-text strong {
-  color: #c41e3a;
+.feedback-text p:last-child {
+  margin-bottom: 0;
 }
 
-/* 文字一覧 */
-.character-list {
-  background: white;
-  padding: 1.5rem;
+/* 文字ごとの結果 */
+.char-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.char-result {
+  flex: 1 1 220px;
+  border: 2px solid #ebe7e2;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  height: fit-content;
-  position: sticky;
-  top: 1rem;
+  padding: 0.9rem 1rem;
 }
 
-.character-list h3 {
-  margin-bottom: 1rem;
+.char-result-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.char-result-head .crc {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #c41e3a;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  line-height: 1;
+}
+
+.char-result-head strong {
   font-size: 1.1rem;
   color: #1a3a52;
+}
+
+.check-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.check-list li {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+}
+
+.check-list .mark {
+  font-weight: 700;
+}
+
+.check-list .ok .mark {
+  color: #2d7d3a;
+}
+
+.check-list .ng .mark {
+  color: #d97d2c;
+}
+
+/* ========== 5. 先生用 ========== */
+
+.teacher-card {
+  background: #f6f8fa;
+}
+
+.teacher-state {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.state-on {
+  color: #2d7d3a;
+  font-weight: 600;
+}
+
+.state-off {
+  color: #6b6b6b;
+}
+
+.ref-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 2px solid #ded7cf;
+  border-radius: 6px;
+  background: white;
+}
+
+/* ========== 文字一覧 ========== */
+
+.character-list {
+  position: sticky;
+  top: 1rem;
+  height: fit-content;
+}
+
+.character-list .sub-title {
+  margin-top: 0;
 }
 
 .char-buttons {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
-  max-height: 600px;
+  max-height: 60vh;
   overflow-y: auto;
 }
 
 .char-button {
-  padding: 0.7rem;
+  position: relative;
+  padding: 0.7rem 0.3rem;
   background: white;
   border: 2px solid #ddd;
   border-radius: 6px;
   cursor: pointer;
   text-align: center;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 600;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
   transition: all 0.2s;
   min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .char-button:hover {
-  background: #f0f8ff;
   border-color: #c41e3a;
+}
+
+.char-button.active {
+  border-color: #c41e3a;
+  border-width: 3px;
+  background: #fdf0f2;
 }
 
 .char-button.solved {
@@ -418,13 +786,25 @@ body {
   border-color: #2d7d3a;
 }
 
-.char-button.solved::after {
-  content: "✓";
-  font-size: 0.8em;
-  margin-left: 0.2rem;
+.char-button.solved.active {
+  background: #2d7d3a;
+  border-color: #c41e3a;
 }
 
-/* フッター */
+/* 先生手本が登録されている印 */
+.char-button.has-ref::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c41e3a;
+}
+
+/* ========== フッター ========== */
+
 .footer {
   text-align: center;
   padding: 2rem 1rem;
@@ -434,15 +814,7 @@ body {
 
 /* ========== レスポンシブ ========== */
 
-@media (max-width: 768px) {
-  html {
-    font-size: 14px;
-  }
-
-  .shodo-header h1 {
-    font-size: 1.8rem;
-  }
-
+@media (max-width: 860px) {
   .lesson-main {
     grid-template-columns: 1fr;
   }
@@ -452,41 +824,46 @@ body {
   }
 
   .char-buttons {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
+    max-height: none;
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  .shodo-header h1 {
+    font-size: 1.8rem;
   }
 
   .grade-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 
-  .canvas-buttons {
-    flex-direction: column;
-  }
-
-  .canvas-buttons .btn {
-    width: 100%;
+  .btn {
+    flex: 1 1 140px;
   }
 }
 
 @media (max-width: 480px) {
   html {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .container {
     padding: 0.75rem;
   }
 
-  .shodo-header {
-    padding: 1.5rem 1rem;
-  }
-
-  .shodo-header h1 {
-    font-size: 1.5rem;
+  .char-head {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
   }
 
   .char-name {
-    font-size: 3rem;
+    font-size: 4rem;
   }
 
   .grade-grid {
@@ -497,33 +874,16 @@ body {
     grid-template-columns: repeat(4, 1fr);
   }
 
-  #drawingCanvas {
-    max-width: 100%;
-    border-width: 2px;
-  }
-
   .score-display {
     flex-direction: column;
     text-align: center;
   }
 
-  .score-circle {
-    width: 70px;
-    height: 70px;
-  }
-}
-
-/* ========== ダークモード対応（将来） ========== */
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1a1a1a;
-    color: #f5f5f5;
+  .camera-controls {
+    flex-direction: column;
   }
 
-  .btn.secondary {
-    background: #2a2a2a;
-    color: #f5f5f5;
-    border-color: #444;
+  .field select {
+    max-width: 100%;
   }
 }
