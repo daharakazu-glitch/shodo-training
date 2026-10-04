@@ -23,10 +23,6 @@ window.StrokeAnim = (function () {
 
   const MS_PER_STROKE = 900;   // 1画あたりの時間
 
-  // 字形を現す帯の太さ（0〜VIEW の座標系）。
-  // 筆の線より太くしておかないと、画の一部が現れずに欠ける。
-  const REVEAL_WIDTH = 64;
-
   /**
    * アニメーションを作る
    *
@@ -47,6 +43,7 @@ window.StrokeAnim = (function () {
     let glyph = null;
     let paths = fitPaths(strokes, null, side);
     let layers = [];
+    let bands = [];   // 画ごとの線の太さの半分（筆先までを出すときの消し幅に使う）
 
     useGlyph(BrushFont.glyph(charData.char, side));
     BrushFont.load().then(() => {
@@ -57,7 +54,9 @@ window.StrokeAnim = (function () {
     function useGlyph(g) {
       glyph = g;
       paths = fitPaths(strokes, g, side);
-      layers = g ? buildLayers(g, paths, side) : [];
+      const built = g ? buildLayers(g, paths, side) : { layers: [], bands: [] };
+      layers = built.layers;
+      bands = built.bands;
     }
 
     let rafId = null;
@@ -133,7 +132,9 @@ window.StrokeAnim = (function () {
      * いま書いている画を、筆先の位置まで出した層
      *
      * その画が受け持つ部分だけを並べた層から、まだ書いていない側を消す。
-     * 消す帯が多少太くても、他の画の墨はこの層に入っていないので影響しない。
+     *
+     * 消す帯はその画の線の太さに合わせる。太くしすぎると、帯の丸い先が
+     * 書き終わった側まで食い込み、墨が筆先から大きく遅れて出てしまう。
      *
      * @private
      */
@@ -147,7 +148,7 @@ window.StrokeAnim = (function () {
       const rest = subPath(paths[i], ratio);
       if (rest.length >= 2) {
         g.globalCompositeOperation = "destination-out";
-        drawStroke(g, rest, 1, "#000", side * 0.42);
+        drawStroke(g, rest, 1, "#000", (bands[i] || side * 0.03) * 3);
       }
 
       g.globalCompositeOperation = "source-in";
@@ -331,16 +332,30 @@ window.StrokeAnim = (function () {
   /**
    * 手本の墨を、画ごとの層に分ける。
    *
-   * 墨の付いた画素を「いちばん近い道筋」の画に振り分ける。道筋を太い帯にして
-   * 切り出す方法だと、帯が細ければ画が欠け、太ければ隣の画まで出てしまうが、
-   * 振り分けなら字形のすべての画素がどれか1つの画にちょうど一度だけ入る。
+   * 画素を「いちばん近い道筋」の画だけに振り分けると、画が交わるところで
+   * 両側から切り込みが入り、1画ずつ見たときに楔形に欠けた線になってしまう。
+   * 毛筆は交点でも一本の線として運ぶので、それでは手本にならない。
+   *
+   * そこで各画は、
+   *   ・いちばん近い道筋が自分である画素（画のふくらみや払いの先まで拾える）
+   *   ・自分の道筋から、その画の線の太さの半分以内にある画素
+   * の両方を受け持つ。後者があるおかげで、交わるところでも線が切れずにつながる。
+   * 重なった分は前後の画が重ねて持つが、墨の色は同じなので見た目は変わらない。
+   *
+   * 受け持つ幅は画ごとに違う（太い横画と細い払いでは倍ちがう）ので、
+   * 手本の墨そのものから画ごとに測る。一律に広く取ると、交点で隣の画の墨まで
+   * 抱き込んでこぶのようにふくらんでしまう。
    *
    * @private
-   * @returns {Array<HTMLCanvasElement>} 画ごとの層（黒・背景は透明）
+   * @returns {{layers:Array<HTMLCanvasElement>, bands:Array<number>}}
+   *          画ごとの層（黒・背景は透明）と、画ごとの線の太さの半分
    */
   function buildLayers(glyph, paths, side) {
     const src = glyph.canvas.getContext("2d").getImageData(0, 0, side, side).data;
     const buffers = paths.map(() => new Uint8ClampedArray(side * side * 4));
+    const thickness = inkThickness(src, side);
+    const bands = paths.map(pts => halfWidthAlong(pts, thickness, side) * 1.15);
+    const dists = new Array(paths.length);
 
     for (let y = 0; y < side; y++) {
       for (let x = 0; x < side; x++) {
@@ -352,21 +367,102 @@ window.StrokeAnim = (function () {
         let bestD = Infinity;
         for (let k = 0; k < paths.length; k++) {
           const d = distToPath(x, y, paths[k]);
+          dists[k] = d;
           if (d < bestD) {
             bestD = d;
             best = k;
           }
         }
 
-        buffers[best][i + 3] = alpha; // 色は後から付けるので黒（0,0,0）のまま
+        // 色は後から付けるので黒（0,0,0）のまま、濃さだけ入れる
+        for (let k = 0; k < paths.length; k++) {
+          if (k === best || dists[k] <= bands[k]) buffers[k][i + 3] = alpha;
+        }
       }
     }
 
-    return buffers.map(buf => {
+    const layers = buffers.map(buf => {
       const cv = makeScratch(side);
       cv.getContext("2d").putImageData(new ImageData(buf, side, side), 0, 0);
       return cv;
     });
+
+    return { layers, bands };
+  }
+
+  /**
+   * 墨の各点から紙（余白）までの距離を測る。
+   *
+   * 線の真ん中がいちばん大きく、ふちで 0 になる。線の芯での値が
+   * そのまま「そこでの線の太さの半分」になる。
+   *
+   * @private
+   * @returns {Float32Array} side*side の距離
+   */
+  function inkThickness(src, side) {
+    const INF = side * 2;
+    const d = new Float32Array(side * side);
+
+    for (let i = 0, p = 0; p < d.length; i += 4, p++) {
+      d[p] = src[i + 3] >= 128 ? INF : 0;
+    }
+
+    const at = (x, y) => (x < 0 || y < 0 || x >= side || y >= side ? 0 : d[y * side + x]);
+
+    for (let y = 0; y < side; y++) {
+      for (let x = 0; x < side; x++) {
+        const p = y * side + x;
+        if (d[p] === 0) continue;
+        d[p] = Math.min(
+          d[p],
+          at(x - 1, y) + 1, at(x, y - 1) + 1,
+          at(x - 1, y - 1) + 1.4142, at(x + 1, y - 1) + 1.4142
+        );
+      }
+    }
+    for (let y = side - 1; y >= 0; y--) {
+      for (let x = side - 1; x >= 0; x--) {
+        const p = y * side + x;
+        if (d[p] === 0) continue;
+        d[p] = Math.min(
+          d[p],
+          at(x + 1, y) + 1, at(x, y + 1) + 1,
+          at(x + 1, y + 1) + 1.4142, at(x - 1, y + 1) + 1.4142
+        );
+      }
+    }
+
+    return d;
+  }
+
+  /**
+   * ある画の線の太さの半分を求める。
+   *
+   * 道筋をたどりながら、その真下の墨の厚みを拾って中央値を取る。
+   * 平均ではなく中央値にするのは、払いの先や起筆のふくらみに引きずられないため。
+   *
+   * @private
+   */
+  function halfWidthAlong(pts, thickness, side) {
+    const samples = [];
+    const total = pathLength(pts);
+    const steps = Math.max(8, Math.round(total / 3));
+
+    for (let i = 0; i <= steps; i++) {
+      const p = pointAt(pts, i / steps);
+      const x = Math.round(p.x);
+      const y = Math.round(p.y);
+      if (x < 0 || y < 0 || x >= side || y >= side) continue;
+      const v = thickness[y * side + x];
+      if (v > 0) samples.push(v);
+    }
+
+    if (samples.length === 0) return side * 0.03;
+
+    samples.sort((a, b) => a - b);
+    const mid = samples[samples.length >> 1];
+
+    return Math.max(side * 0.012, Math.min(side * 0.06, mid));
   }
 
   /** @private 点から折れ線までの距離 */
