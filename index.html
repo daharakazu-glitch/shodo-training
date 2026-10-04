@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>書道トレーニング | 小学生向け</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="shodo-header">
+      <h1>✍️ 書道トレーニング</h1>
+      <p>小学生向け 文字練習アプリ</p>
+    </header>
+
+    <section class="progress-card">
+      <div class="progress-stat">
+        <span>学習済みの文字</span>
+        <b id="statNum">0 / 0</b>
+      </div>
+      <div class="bar"><i id="barFill"></i></div>
+    </section>
+
+    <section class="grade-section">
+      <h2>学年を選ぼう</h2>
+      <div class="grade-grid" id="gradeGrid">
+        <!-- JS で動的生成 -->
+      </div>
+    </section>
+
+    <section class="tutorial-card">
+      <h2>📖 使い方</h2>
+      <ol>
+        <li><strong>学年を選ぶ</strong> → 学年ボタンをタップ</li>
+        <li><strong>文字をなぞる</strong> → Canvas に描く</li>
+        <li><strong>採点をもらう</strong> → 「採点する」ボタンを押す</li>
+        <li><strong>進捗が保存される</strong> → 何度でも練習できる</li>
+      </ol>
+    </section>
+
+    <footer class="footer">
+      <p>© 2026 AIチーム 書道トレーニング</p>
+    </footer>
+  </div>
+
+  <script src="data/grades-meta.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

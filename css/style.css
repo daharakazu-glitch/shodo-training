@@ -1,0 +1,529 @@
+/*
+ * 書道トレーニング スタイルシート
+ * デザイン: 彩(Aya) UX/UIデザイナー
+ * 小学生向け親しみやすい配色・大型ボタン・レスポンシブ対応
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: "Yu Gothic", "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  background-color: #f9f7f5;
+  color: #1a1a1a;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* ========== ダッシュボード ========== */
+
+.shodo-header {
+  background: linear-gradient(135deg, #c41e3a 0%, #8b0000 100%);
+  color: white;
+  padding: 2rem 1.5rem;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.2);
+}
+
+.shodo-header h1 {
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.shodo-header p {
+  font-size: 1rem;
+  opacity: 0.95;
+}
+
+/* 進捗カード */
+.progress-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.progress-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.progress-stat span {
+  font-weight: 500;
+  color: #666;
+}
+
+.progress-stat b {
+  font-size: 1.5rem;
+  color: #c41e3a;
+}
+
+.bar {
+  width: 100%;
+  height: 24px;
+  background: #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2d7d3a, #4db347);
+  border-radius: 12px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+/* 学年セクション */
+.grade-section {
+  margin-bottom: 3rem;
+}
+
+.grade-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  color: #1a3a52;
+}
+
+.grade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.grade-btn {
+  padding: 1.5rem;
+  background: white;
+  border: 3px solid #ddd;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.grade-btn:hover {
+  background: #f0f8ff;
+  border-color: #c41e3a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
+}
+
+.grade-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(196, 30, 58, 0.15);
+}
+
+.grade-btn.completed {
+  background: #2d7d3a;
+  color: white;
+  border-color: #2d7d3a;
+}
+
+/* チュートリアルカード */
+.tutorial-card {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 1.5rem;
+  border-radius: 6px;
+  margin-bottom: 2rem;
+}
+
+.tutorial-card h2 {
+  margin-bottom: 1rem;
+  color: #1a1a1a;
+}
+
+.tutorial-card ol {
+  margin-left: 1.5rem;
+  line-height: 2;
+}
+
+.tutorial-card li {
+  margin-bottom: 0.5rem;
+}
+
+/* ========== レッスンページ ========== */
+
+.lesson-container {
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+}
+
+.lesson-header {
+  margin-bottom: 2rem;
+}
+
+.back-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #f0f0f0;
+  border-radius: 6px;
+  color: #1a1a1a;
+  text-decoration: none;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+}
+
+.back-link:hover {
+  background: #e0e0e0;
+}
+
+.lesson-header h1 {
+  font-size: 1.8rem;
+  color: #1a3a52;
+}
+
+.lesson-main {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+/* 文字表示カード */
+.character-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.char-display {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.char-name {
+  font-size: 4rem;
+  font-weight: 700;
+  color: #c41e3a;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.char-display p {
+  font-size: 1rem;
+}
+
+.char-display .example {
+  font-size: 0.95rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+/* Canvas セクション */
+.canvas-section {
+  margin-bottom: 1.5rem;
+}
+
+.instruction {
+  text-align: center;
+  font-size: 1rem;
+  color: #666;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+#drawingCanvas {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  margin: 0 auto 1.5rem;
+  border: 3px solid #333;
+  background: white;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.canvas-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+/* ボタン */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 120px;
+  touch-action: manipulation;
+}
+
+.btn.primary {
+  background: #c41e3a;
+  color: white;
+  min-height: 48px;
+  min-width: 140px;
+}
+
+.btn.primary:hover {
+  background: #a01630;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.3);
+}
+
+.btn.primary:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 6px rgba(196, 30, 58, 0.3);
+}
+
+.btn.secondary {
+  background: #f0f0f0;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  min-height: 48px;
+}
+
+.btn.secondary:hover {
+  background: #e0e0e0;
+}
+
+.btn.secondary:active {
+  transform: scale(0.98);
+}
+
+/* フィードバックパネル */
+.feedback-panel {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 1.5rem;
+  border-radius: 6px;
+  margin-top: 1.5rem;
+}
+
+.score-display {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.score-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.score-display h3 {
+  margin-bottom: 0.3rem;
+  font-size: 1rem;
+  color: #666;
+}
+
+.score-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #c41e3a;
+}
+
+.feedback-text {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.feedback-text strong {
+  color: #c41e3a;
+}
+
+/* 文字一覧 */
+.character-list {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  height: fit-content;
+  position: sticky;
+  top: 1rem;
+}
+
+.character-list h3 {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: #1a3a52;
+}
+
+.char-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.char-button {
+  padding: 0.7rem;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.char-button:hover {
+  background: #f0f8ff;
+  border-color: #c41e3a;
+}
+
+.char-button.solved {
+  background: #2d7d3a;
+  color: white;
+  border-color: #2d7d3a;
+}
+
+.char-button.solved::after {
+  content: "✓";
+  font-size: 0.8em;
+  margin-left: 0.2rem;
+}
+
+/* フッター */
+.footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #999;
+  font-size: 0.95rem;
+}
+
+/* ========== レスポンシブ ========== */
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+
+  .shodo-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .lesson-main {
+    grid-template-columns: 1fr;
+  }
+
+  .character-list {
+    position: static;
+  }
+
+  .char-buttons {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .grade-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .canvas-buttons {
+    flex-direction: column;
+  }
+
+  .canvas-buttons .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 13px;
+  }
+
+  .container {
+    padding: 0.75rem;
+  }
+
+  .shodo-header {
+    padding: 1.5rem 1rem;
+  }
+
+  .shodo-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .char-name {
+    font-size: 3rem;
+  }
+
+  .grade-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .char-buttons {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  #drawingCanvas {
+    max-width: 100%;
+    border-width: 2px;
+  }
+
+  .score-display {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .score-circle {
+    width: 70px;
+    height: 70px;
+  }
+}
+
+/* ========== ダークモード対応（将来） ========== */
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #f5f5f5;
+  }
+
+  .btn.secondary {
+    background: #2a2a2a;
+    color: #f5f5f5;
+    border-color: #444;
+  }
+}

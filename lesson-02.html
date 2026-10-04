@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2年生 | 書道トレーニング</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container lesson-container">
+    <header class="lesson-header">
+      <a class="back-link" href="index.html">← もどる</a>
+      <h1>2年生の文字を学ぼう</h1>
+    </header>
+
+    <div class="lesson-main">
+      <!-- Canvas 描画エリア -->
+      <section class="character-card">
+        <div class="char-display">
+          <div class="char-name" id="charName">あ</div>
+          <p id="charReading">あ（ひらがな）</p>
+          <p id="charExample" class="example"></p>
+        </div>
+
+        <div class="canvas-section">
+          <p class="instruction">灰色の文字をなぞりましょう</p>
+          <canvas id="drawingCanvas" width="400" height="400"></canvas>
+          <div class="canvas-buttons">
+            <button id="clearBtn" class="btn secondary">リセット</button>
+            <button id="submitBtn" class="btn primary">採点する</button>
+          </div>
+        </div>
+
+        <!-- フィードバック -->
+        <div id="feedbackPanel" class="feedback-panel" style="display:none;">
+          <div class="score-display">
+            <span id="scoreCircle" class="score-circle"></span>
+            <div>
+              <h3>採点結果</h3>
+              <p class="score-value"><span id="scoreNum">0</span>点</p>
+            </div>
+          </div>
+          <p id="feedback" class="feedback-text"></p>
+          <button id="nextBtn" class="btn primary">次の文字へ</button>
+        </div>
+      </section>
+
+      <!-- 文字一覧 -->
+      <aside class="character-list">
+        <h3>この学年の文字</h3>
+        <div id="charList" class="char-buttons">
+          <!-- JS で生成 -->
+        </div>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <p>© 2026 AIチーム 書道トレーニング</p>
+    </footer>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="data/grades-meta.js"></script>
+  <script src="data/grade02.js"></script>
+  <script src="data/strokes-db.js"></script>
+  <script src="js/scorer.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/lesson.js"></script>
+</body>
+</html>
