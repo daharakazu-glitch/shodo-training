@@ -1,6 +1,10 @@
 /*
  * 学年メタデータ
  * 各学年の基本情報と対応ファイル定義
+ *
+ * total は data/gradeNN.js に実際に収録してある文字数。
+ * 配当文字の総数（1年なら126字）を入れると、全部やっても分母に届かず
+ * 進捗が永久に埋まらないため、収録数に合わせる。
  */
 
 window.GRADES_META = [
@@ -9,7 +13,7 @@ window.GRADES_META = [
     title: "1年生",
     subtitle: "ひらがな＋漢字入門",
     href: "lesson-01.html",
-    total: 126,  // ひらがな46 + 漢字80
+    total: 13,  // ひらがな3 + 漢字10
     description: "小学1年配当の文字を学びます"
   },
   {
@@ -17,7 +21,7 @@ window.GRADES_META = [
     title: "2年生",
     subtitle: "漢字・ひらがな練習",
     href: "lesson-02.html",
-    total: 160,
+    total: 8,
     description: "小学2年配当の文字を学びます"
   },
   {

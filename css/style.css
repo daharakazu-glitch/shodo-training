@@ -112,6 +112,7 @@ body {
 }
 
 .grade-btn {
+  display: block;
   padding: 1.5rem;
   background: white;
   border: 3px solid #ddd;
@@ -120,6 +121,9 @@ body {
   text-align: center;
   font-size: 1.1rem;
   font-weight: 600;
+  /* a 要素で描いているので、リンクの既定の色と下線を打ち消す */
+  color: #1a3a52;
+  text-decoration: none;
   transition: all 0.2s;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
