@@ -1,0 +1,142 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "Yu Gothic", "Hiragino Sans", "Segoe UI", sans-serif;
+  background: #f4f6f9;
+  color: #1a1a1a;
+  line-height: 1.6;
+}
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 1rem; }
+
+.head {
+  background: linear-gradient(135deg, #2b5876 0%, #1d3a52 100%);
+  color: #fff;
+  padding: 1.6rem 1.4rem;
+  border-radius: 10px;
+  margin-bottom: 1.2rem;
+}
+.head h1 { font-size: 1.7rem; margin-bottom: .3rem; }
+.head .privacy { font-size: .85rem; opacity: .85; margin-top: .3rem; }
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: 2.2rem 1rem;
+  border: 3px dashed #9fb3c8;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  transition: background .15s, border-color .15s;
+  margin-bottom: 1.2rem;
+}
+.drop:hover, .drop.over { background: #eaf2fb; border-color: #2b5876; }
+.drop input { display: none; }
+.drop-main { font-size: 1.15rem; font-weight: bold; color: #2b5876; }
+.drop-sub { font-size: .9rem; color: #555; }
+
+.list-card, .options-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 1.2rem;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
+}
+h2 { font-size: 1.15rem; margin-bottom: .6rem; }
+h2 small { font-size: .85rem; font-weight: normal; color: #666; margin-left: .4rem; }
+
+.list-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; }
+.list-tools { display: flex; gap: .4rem; }
+.hint { font-size: .85rem; color: #666; margin-bottom: .8rem; }
+
+.file-list { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .5rem .6rem;
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  background: #fafbfc;
+  cursor: grab;
+}
+.file-item.dragging { opacity: .4; }
+.file-item.drop-before { box-shadow: 0 -3px 0 #2b5876; }
+.file-item.drop-after { box-shadow: 0 3px 0 #2b5876; }
+.file-item.error { border-color: #d9534f; background: #fdf1f0; }
+
+.num { width: 1.6rem; text-align: center; font-weight: bold; color: #2b5876; flex-shrink: 0; }
+.thumb {
+  width: 56px; height: 56px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: #e7ecf1 center / contain no-repeat;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: bold; color: #fff;
+}
+.thumb.pdf { background: #d9534f; }
+.thumb.unknown { background: #9aa5b1; }
+.info { flex: 1; min-width: 0; }
+.info .name { font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info .meta { font-size: .8rem; color: #666; }
+.file-item.error .meta { color: #c9302c; }
+
+.actions { display: flex; gap: .25rem; flex-shrink: 0; }
+.icon-btn {
+  width: 2.1rem; height: 2.1rem;
+  border: 1px solid #c8d2dc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: .9rem;
+}
+.icon-btn:hover:not(:disabled) { background: #eaf2fb; }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.icon-btn.del:hover { background: #fdecea; color: #c9302c; }
+
+.opt { margin-bottom: 1rem; display: flex; flex-direction: column; gap: .3rem; }
+.opt-label { font-weight: bold; font-size: .95rem; }
+.opt select, .opt input[type="text"] {
+  font-size: 1rem;
+  padding: .45rem .6rem;
+  border: 1px solid #c8d2dc;
+  border-radius: 6px;
+  max-width: 320px;
+}
+.name-row { display: flex; align-items: center; gap: .3rem; }
+.name-row input { flex: 1; min-width: 0; }
+
+.btn {
+  font-size: .9rem;
+  padding: .45rem .9rem;
+  border-radius: 6px;
+  border: 1px solid #c8d2dc;
+  background: #fff;
+  cursor: pointer;
+}
+.btn.ghost:hover { background: #f0f3f6; }
+.btn.primary {
+  width: 100%;
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: .9rem;
+  border: none;
+  background: #2b5876;
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) { background: #1d3a52; }
+.btn.primary:disabled { background: #8aa1b5; cursor: default; }
+
+.status { margin-top: .7rem; font-size: .9rem; min-height: 1.4em; }
+.status.err { color: #c9302c; }
+.status.ok { color: #2e7d32; }
+
+@media (max-width: 520px) {
+  .head h1 { font-size: 1.35rem; }
+  .thumb { width: 44px; height: 44px; }
+  .file-item { gap: .5rem; }
+  .icon-btn { width: 1.9rem; height: 1.9rem; }
+}

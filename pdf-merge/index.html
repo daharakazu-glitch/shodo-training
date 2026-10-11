@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF・画像まとめツール</title>
+  <link rel="stylesheet" href="merge.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="head">
+      <h1>PDF・画像まとめツール</h1>
+      <p>複数の JPEG・PNG・PDF を、1つの PDF ファイルにまとめてダウンロードします。</p>
+      <p class="privacy">ファイルはすべてこの端末のブラウザ内で処理され、どこにも送信されません。</p>
+    </header>
+
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf">
+      <span class="drop-main">ここにファイルをドラッグ＆ドロップ</span>
+      <span class="drop-sub">または クリックして選択（JPEG / PNG / PDF・複数可）</span>
+    </label>
+
+    <section class="list-card" id="listCard" hidden>
+      <div class="list-head">
+        <h2>まとめる順番 <small id="summary"></small></h2>
+        <div class="list-tools">
+          <button type="button" class="btn ghost" id="sortName">名前順に並べる</button>
+          <button type="button" class="btn ghost" id="clearAll">すべて削除</button>
+        </div>
+      </div>
+      <p class="hint">カードをドラッグするか、▲▼ ボタンで順番を入れ替えられます。</p>
+      <ol class="file-list" id="fileList"></ol>
+    </section>
+
+    <section class="options-card" id="optionsCard" hidden>
+      <h2>出力の設定</h2>
+      <div class="opt">
+        <span class="opt-label">画像のページサイズ</span>
+        <label><input type="radio" name="pageSize" value="a4" checked> A4 に合わせる（縦横は自動）</label>
+        <label><input type="radio" name="pageSize" value="original"> 画像の大きさのまま</label>
+      </div>
+      <div class="opt">
+        <label class="opt-label" for="margin">A4 の余白</label>
+        <select id="margin">
+          <option value="0">なし</option>
+          <option value="20" selected>狭い（約7mm）</option>
+          <option value="40">標準（約14mm）</option>
+        </select>
+      </div>
+      <div class="opt">
+        <label class="opt-label" for="fileName">ファイル名</label>
+        <div class="name-row">
+          <input type="text" id="fileName" value="まとめ" autocomplete="off">
+          <span>.pdf</span>
+        </div>
+      </div>
+      <button type="button" class="btn primary" id="mergeBtn">1つの PDF にまとめてダウンロード</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="merge.js"></script>
+</body>
+</html>
