@@ -227,11 +227,8 @@
     els.drop.classList.add('over');
   }));
   ['dragleave', 'drop'].forEach(ev => els.drop.addEventListener(ev, () => els.drop.classList.remove('over')));
-  els.drop.addEventListener('drop', e => {
-    if (dragId !== null) return;
-    e.preventDefault();
-    addFiles(e.dataTransfer.files);
-  });
+  // ファイルの追加は window でだけ受ける。ドロップ領域に落とした drop も window まで
+  // 伝わるので、ドロップ領域にも追加処理を置くと同じファイルが2回入る。
   // ドロップ領域の外に落としてもブラウザがファイルを開かないようにする
   window.addEventListener('dragover', e => { if (dragId === null) e.preventDefault(); });
   window.addEventListener('drop', e => {
